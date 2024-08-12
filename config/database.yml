@@ -1,0 +1,19 @@
+default: &default
+  adapter: postgresql
+  encoding: utf8
+  pool: 5
+  timeout: 5000
+
+development:
+  <<: *default
+  host: "<%= ENV['OGM_DB_HOST'] %>"
+  database: "<%= ENV['OGM_DB_DATABASE'] %>"
+  username: "<%= ENV['OGM_DB_USER'] %>"
+  password: "<%= ENV['OGM_DB_PASSWORD'] %>"
+
+production:
+  <<: *default
+  host: "<%= ENV['OGM_DB_HOST'] %>"
+  database: "<%= ENV['OGM_DB_DATABASE'] %>"
+  username: "<%= ENV['OGM_DB_USER'] %>"
+  password: "<%= ENV['OGM_DB_PASSWORD'] %>"
