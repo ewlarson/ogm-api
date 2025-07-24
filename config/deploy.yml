@@ -26,7 +26,7 @@ registry:
 # ───────────────── ENV passed into *every* web container ────────────────
 env:
   clear:
-    OPENSEARCH_URL:        http://elasticsearch:9200
+    ELASTICSEARCH_URL:     http://127.0.0.1:9200
     REDIS_URL:             redis://redis:6379/0
     ELASTICSEARCH_INDEX:   btaa_ogm_api
     REDIS_TTL:             "604800"
@@ -50,6 +50,8 @@ accessories:
         xpack.security.enabled: "false"
         ES_JAVA_OPTS: "-Xms2g -Xmx2g"
         cluster.routing.allocation.disk.threshold_enabled: "true"
+    # only listen on localhost
+    port: "127.0.0.1:9200:9200"
     directories:
       - esdata:/usr/share/elasticsearch/data
 
