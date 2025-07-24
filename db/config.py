@@ -12,6 +12,8 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "btaa_ogm_api")
 
 # Construct database URL with asyncpg driver
+print(f"DATABASE_URL from env: {os.getenv('DATABASE_URL')}")
+
 DATABASE_URL = os.getenv("DATABASE_URL") or f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 print(f"Using database URL: {DATABASE_URL}")
