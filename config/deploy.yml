@@ -79,19 +79,6 @@ accessories:
     directories:
       - redisdata:/data
 
-  celery:
-    image: ghcr.io/ewlarson/ogm-api
-    roles: [web]
-    cmd: celery -A app.tasks.worker worker --loglevel=INFO
-    env:
-      secret:
-        - OPENAI_API_KEY
-
-  flower:
-    image: ghcr.io/ewlarson/ogm-api
-    roles: [web]
-    cmd: bash -c "cd /app && celery -A app.tasks.worker flower --port=5555"
-
 volumes:
   - esdata
   - pgdata
