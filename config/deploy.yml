@@ -31,7 +31,7 @@ env:
     POSTGRES_DB:   btaa_ogm_api
 
     # construct URL from same creds (the app will substitute $POSTGRES_PASSWORD)
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@ogm-api-postgres:5432/${POSTGRES_DB}
 
     OPENSEARCH_URL:        http://elasticsearch:9200
     REDIS_URL:             redis://redis:6379/0
@@ -72,7 +72,8 @@ accessories:
 
     # only listen on localhost
     port: "127.0.0.1:5432:5432"
-
+    files:
+      - config/init.sql:/docker-entrypoint-initdb.d/setup.sql
     directories:
       - pgdata:/var/lib/postgresql/data
 
