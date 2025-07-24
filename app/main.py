@@ -96,8 +96,6 @@ app.add_middleware(
 # Include routers
 app.include_router(public_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1/admin", dependencies=[Depends(security)])
-app.include_router(gazetteer_router, prefix="/api/v1")
-
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
