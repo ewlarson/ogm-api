@@ -11,7 +11,6 @@ from fastapi.security import HTTPBasic
 
 from app.api.v1.admin import router as admin_router
 from app.api.v1.endpoints import router as public_router
-from app.api.v1.gazetteer import router as gazetteer_router
 from app.elasticsearch import close_elasticsearch, init_elasticsearch
 from db.database import database
 
