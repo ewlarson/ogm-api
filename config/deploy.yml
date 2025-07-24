@@ -17,6 +17,11 @@ proxy:
   ssl: false
   host: 88.99.148.81
   app_port: 8000
+  healthcheck:
+    path: /
+    interval: 30s
+    timeout: 10s
+    retries: 3
 
 registry:
   server: ghcr.io
