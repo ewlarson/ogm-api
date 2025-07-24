@@ -26,7 +26,7 @@ registry:
 # ───────────────── ENV passed into *every* web container ────────────────
 env:
   clear:
-    ELASTICSEARCH_URL:     http://127.0.0.1:9200
+    ELASTICSEARCH_URL:     http://ogm-api-elasticsearch:9200
     REDIS_URL:             redis://redis:6379/0
     ELASTICSEARCH_INDEX:   btaa_ogm_api
     REDIS_TTL:             "604800"
