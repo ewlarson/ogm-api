@@ -1,1 +1,3 @@
 CREATE DATABASE btaa_ogm_api;
+CREATE USER ogm_api_user WITH PASSWORD '${POSTGRES_PASSWORD}';
+GRANT ALL PRIVILEGES ON DATABASE btaa_ogm_api TO ogm_api_user;
