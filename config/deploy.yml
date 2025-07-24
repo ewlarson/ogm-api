@@ -1,6 +1,7 @@
 # config/deploy.yml
 service: ogm-api
 image: ghcr.io/ewlarson/ogm-api
+port: "80:8000"
 
 builder:
   arch: amd64
@@ -12,7 +13,6 @@ servers:
   web:
     hosts:
       - 88.99.148.81
-    port: "8080:8000"
 
 proxy:
   ssl: false
