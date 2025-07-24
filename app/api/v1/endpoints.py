@@ -51,10 +51,10 @@ async def api_root():
     """Return basic API information including version."""
     return JSONResponse(
         content={
-            "api": "BTAA Geodata API",
+            "api": "OpenGeoMetadata API",
             "version": "0.1.0",
             "description": (
-                "API for accessing geospatial data from the Big Ten Academic Alliance Geoportal"
+                "A REST API for accessing geospatial metadata from the OpenGeoMetadata community."
             ),
             "endpoints": ["/items", "/search", "/suggest"],
         }
