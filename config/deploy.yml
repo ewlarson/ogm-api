@@ -26,13 +26,10 @@ registry:
 # ───────────────── ENV passed into *every* web container ────────────────
 env:
   clear:
-    # new DB credentials
+    # new DB credentials (must match paradedb below)
     POSTGRES_USER: ogm_api_user
     POSTGRES_DB:   btaa_ogm_api
-    DB_USER: ogm_api_user
-    DB_NAME: btaa_ogm_api
-    DB_HOST: ogm-api-postgres
-    DB_PORT: 5432
+    DATABASE_URL: postgresql+asyncpg://ogm_api_user:${POSTGRES_PASSWORD}@ogm-api-postgres:5432/btaa_ogm_api
 
     OPENSEARCH_URL:        http://elasticsearch:9200
     REDIS_URL:             redis://redis:6379/0
