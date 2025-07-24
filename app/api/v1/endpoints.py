@@ -67,28 +67,67 @@ async def get_item(
     id: str,
     callback: Optional[str] = Query(None, description="JSONP callback name"),
 ):
-    """Get a single item by ID."""
+    """Get a single item by ID (direct SQL version)."""
     try:
-        search_service = SearchService()
-        response = await search_service.get_item(id)
-        if not response:
-            return JSONResponse(content={"error": "Item not found"}, status_code=404)
-
-        # Sanitize the item data for JSON serialization
-        response = sanitize_for_json(response)
-
-        # Add Allmaps data
-        logger.info(f"Processing item data: {response}")
         async with async_session() as session:
-            allmaps_service = AllmapsService(
-                {"id": id, "attributes": response["data"]["attributes"]}
-            )
+            query = select(items).where(items.c.id == id)
+            result = await session.execute(query)
+            row = result.fetchone()
+            if not row:
+                return JSONResponse(content={"error": "Item not found"}, status_code=404)
+
+            # Convert to dict and sanitize datetime objects
+            item_dict = sanitize_for_json(dict(row._mapping))
+
+            # Add thumbnail URL
+            item_dict = add_thumbnail_url(item_dict)
+
+            # Add citation
+            from app.services.citation_service import CitationService
+            citation_service = CitationService(item_dict)
+            item_dict["ui_citation"] = citation_service.get_citation()
+
+            # Add download options
+            download_service = DownloadService(item_dict)
+            item_dict["ui_downloads"] = download_service.get_download_options()
+
+            # Add viewer attributes
+            viewer_service = ViewerService(item_dict)
+            viewer_attributes = viewer_service.get_viewer_attributes()
+            item_dict.update(viewer_attributes)
+
+            # Add relationships
+            from app.services.relationship_service import RelationshipService
+            relationship_service = RelationshipService()
+            relationships = await relationship_service.get_item_relationships(id)
+            item_dict["ui_relationships"] = relationships
+
+            # Add summaries
+            summaries_query = text("""
+                SELECT * FROM item_ai_enrichments 
+                WHERE item_id = :item_id 
+                ORDER BY created_at DESC
+            """)
+            summaries_result = await session.execute(summaries_query, {"item_id": id})
+            summaries = summaries_result.fetchall()
+            item_dict["ui_summaries"] = [sanitize_for_json(dict(summary)) for summary in summaries]
+
+            # Add Allmaps data
+            logger.info(f"Processing item data: {item_dict}")
+            allmaps_service = AllmapsService({"id": id, "attributes": item_dict})
             allmaps_attributes = await allmaps_service.get_allmaps_attributes(session)
             logger.info(f"Got Allmaps attributes: {allmaps_attributes}")
-            # Update the attributes dictionary
-            response["data"]["attributes"].update(allmaps_attributes)
+            item_dict.update(allmaps_attributes)
 
-        return create_response(response, callback)
+            response = {
+                "data": {
+                    "type": "item",
+                    "id": str(item_dict["id"]),
+                    "attributes": item_dict,
+                }
+            }
+
+            return create_response(response, callback)
     except HTTPException:
         # Re-raise HTTP exceptions to maintain their status code
         raise
