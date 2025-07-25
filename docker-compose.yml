@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ewlarson/btaa-ogm-api:0.1.1
-    container_name: btaa-ogm-api-app
+    image: ewlarson/ogm-api:0.1.1
+    container_name: ogm-api-app
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@paradedb:5432/btaa_ogm_api
       - ELASTICSEARCH_URL=http://elasticsearch:9200
@@ -39,7 +39,7 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
-    container_name: btaa-ogm-api-elasticsearch
+    container_name: ogm-api-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -62,7 +62,7 @@ services:
 
   paradedb:
     image: paradedb/paradedb:0.15.14
-    container_name: btaa-ogm-api-paradedb
+    container_name: ogm-api-paradedb
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -81,7 +81,7 @@ services:
 
   redis:
     image: redis:7.2
-    container_name: btaa-ogm-api-redis
+    container_name: ogm-api-redis
     command: redis-server --appendonly yes  # Enable persistence
     ports:
       - "6379:6379"
@@ -94,52 +94,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
-  celery_worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: btaa-ogm-api-celery
-    command: celery -A app.tasks.worker worker --loglevel=INFO
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@paradedb:5432/btaa_ogm_api
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_TTL=604800
-      - PYTHONUNBUFFERED=1  # Important for logging
-      - LOG_LEVEL=DEBUG
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-3.5-turbo}
-    volumes:
-      - ./logs:/app/logs
-    depends_on:
-      - redis
-      - paradedb
-    networks:
-      - elastic
-
-  flower:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: btaa-ogm-api-flower
-    command: >
-      bash -c "cd /app && celery -A app.tasks.worker flower --port=5555"
-    ports:
-      - "5555:5555"
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@paradedb:5432/btaa_ogm_api
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_TTL=604800
-      - PYTHONPATH=/app
-      - LOG_LEVEL=DEBUG
-    networks:
-      - elastic
-    depends_on:
-      - redis
-      - paradedb
-      - celery_worker
 
 volumes:
   elasticsearch-data:
