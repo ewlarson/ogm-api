@@ -1,6 +1,6 @@
-# BTAA OpenGeoMetadata API
+# OpenGeoMetadata API
 
-![BTAA OGM API](docs/btaa_ogm_api.png)
+![OGM API](docs/btaa_ogm_api.png)
 
 ## Development
 
@@ -40,7 +40,7 @@ Run the Docker containers:
 
 The application uses several services:
 
-* [ParadeDB](https://www.paradedb.com/) (PostgreSQL-compatible database)
+* [PostgreSQL](https://www.postgresql.org/)
   - Port: 2345
   - Default credentials: postgres/postgres
   - Database: btaa_ogm_api
@@ -55,16 +55,6 @@ The application uses several services:
   - Port: 6379
   - Persistence enabled
   - Used for API caching and Celery tasks
-
-* [Celery Worker](https://docs.celeryq.dev/) (Background task processor)
-  - Processes asynchronous tasks
-  - Connected to Redis and ParadeDB
-  - Logs available in ./logs directory
-
-* [Flower](https://flower.readthedocs.io/) (Celery monitoring)
-  - Port: 5555
-  - Web interface for monitoring Celery tasks
-  - Access at http://localhost:5555
 
 Start all services:
 ```bash
@@ -104,14 +94,6 @@ This script will create and populate the application ES index.
 
 ```bash
 .venv/bin/python run_index.py
-```
-
-## Run the Gazetteers
-
-This script will download and import all the gazetteer data.
-
-```bash
-.venv/bin/python run_gazetteers.py
 ```
 
 ## Docker Hub
@@ -169,95 +151,6 @@ You can manually clear the cache using:
 ```
 GET /api/v1/cache/clear?cache_type=search|document|suggest|all
 ```
-
-## AI Summarization
-
-The API uses OpenAI's ChatGPT API to generate summaries and identify geographic named entities of historical maps and geographic datasets. To use this feature:
-
-1. Set your OpenAI API key in the `.env` file:
-```
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-3.5-turbo
-```
-
-2. The summarization service will automatically use this API key to generate summaries.
-3. The geo_entities service will use the same API to identify and extract geographic named entities from the content.
-
-### Supported Asset Types
-
-The API can process various types of assets to enhance summaries:
-
-- **IIIF Images**: Extracts metadata and visual content from IIIF image services
-- **IIIF Manifests**: Processes IIIF manifests to extract metadata, labels, and descriptions
-- **Cloud Optimized GeoTIFFs (COG)**: Extracts geospatial metadata from COG files
-- **PMTiles**: Processes PMTiles assets to extract tile information
-- **Downloadable Files**: Processes various file types (Shapefiles, Geodatabases, etc.)
-
-### Generating Summaries
-
-To generate a summary for a document:
-
-```
-POST /api/v1/documents/{id}/summarize
-```
-
-This will trigger an asynchronous task to generate a summary. You can retrieve the summary using:
-
-```
-GET /api/v1/documents/{id}/summaries
-```
-
-### Geographic Entity Extraction
-
-The API can identify and extract geographic named entities from documents. This includes:
-
-- Place names
-- Geographic coordinates
-- Administrative boundaries
-- Natural features
-- Historical place names
-
-To extract geographic entities:
-
-```
-POST /api/v1/documents/{id}/extract_entities
-```
-
-The response will include:
-- Extracted entities with confidence scores
-- Geographic coordinates when available
-- Links to gazetteer entries
-- Historical context when relevant
-
-### Future Enhancements
-
-The following AI features are planned:
-
-- Metadata summaries
-- Imagery summaries
-- Tabular data summaries
-- OCR text extraction
-- Subject enhancements
-
-## Colophon
-
-### Gazetteers
-
-#### BTAA Spatial Metadata
-
-Data from BTAA GIN. @TODO add license.
-
-#### GeoNames
-
-Data from GeoNames. [License - CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
-
-#### OCLC FAST Geographic
-
-Data from FAST (Faceted Application of Subject Terminology) which is made available by OCLC Online Computer Library Center, Inc. under the [License - ODC Attribution License](https://www.oclc.org/research/areas/data-science/fast/odcby.html).
-
-#### Who's On First
-
-Data from Who's On First. [License](https://whosonfirst.org/docs/licenses/)
 
 ## TODO
 
