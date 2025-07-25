@@ -95,7 +95,6 @@ app.add_middleware(
 
 # Include routers
 app.include_router(public_router, prefix="/api/v1")
-app.include_router(admin_router, prefix="/api/v1/admin", dependencies=[Depends(security)])
 
 # Add redirect routes
 @app.get("/")
