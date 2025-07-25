@@ -11,11 +11,11 @@ ssh:
 servers:
   web:
     hosts:
-      - geo4lib.app
+      - ogm.geo4lib.app
 
 proxy:
   ssl: true
-  host: geo4lib.app
+  host: ogm.geo4lib.app
   app_port: 8000
   healthcheck:
     path: /api/docs
@@ -37,7 +37,7 @@ env:
     ENDPOINT_CACHE:        "true"
     GAZETTEER_CACHE_TTL:   "3600"
     APP_MODE:              production
-    APPLICATION_URL:       http://http://88.99.148.81/
+    APPLICATION_URL:       http://ogm.geo4lib.app/
 
   secret:
     - DATABASE_URL
