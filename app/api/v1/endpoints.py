@@ -281,34 +281,4 @@ async def get_thumbnail(image_hash: str):
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000"},  # Cache for 1 year
     )
-
-
-@router.get("/items/{id}/summaries")
-async def get_item_summaries(
-    id: str,
-    callback: Optional[str] = Query(None, description="JSONP callback name"),
-):
-    """Get all summaries for an item."""
-    try:
-        # Query the database for summaries
-        async with async_session() as session:
-            query = text("""
-                SELECT * FROM ai_enrichments 
-                WHERE item_id = :item_id 
-                ORDER BY created_at DESC
-            """)
-            result = await session.execute(query, {"item_id": id})
-            summaries = result.fetchall()
-
-            # Convert to list of dicts and sanitize
-            summaries_list = [sanitize_for_json(dict(summary)) for summary in summaries]
-
-            # Create response
-            response_data = {
-                "data": {"type": "summaries", "id": id, "attributes": {"summaries": summaries_list}}
-            }
-
-            return create_response(response_data, callback)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    

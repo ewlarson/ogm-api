@@ -37,6 +37,7 @@ env:
     ENDPOINT_CACHE:        "true"
     GAZETTEER_CACHE_TTL:   "3600"
     APP_MODE:              production
+    APPLICATION_URL:       http://http://88.99.148.81/
 
   secret:
     - DATABASE_URL
