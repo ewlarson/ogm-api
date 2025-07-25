@@ -7,10 +7,9 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi_mcp import FastApiMCP
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic
 
-from app.api.v1.admin import router as admin_router
 from app.api.v1.endpoints import router as public_router
 from app.elasticsearch import close_elasticsearch, init_elasticsearch
 from db.database import database
@@ -97,6 +96,17 @@ app.add_middleware(
 # Include routers
 app.include_router(public_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1/admin", dependencies=[Depends(security)])
+
+# Add redirect routes
+@app.get("/")
+async def redirect_root():
+    """Redirect root path to API docs."""
+    return RedirectResponse(url="/api/docs", status_code=302)
+
+@app.get("/api")
+async def redirect_api():
+    """Redirect /api path to API docs."""
+    return RedirectResponse(url="/api/docs", status_code=302)
 
 # Create an MCP server based on this app
 mcp = FastApiMCP(app)
