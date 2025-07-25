@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi_mcp import FastApiMCP
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic
@@ -96,6 +97,10 @@ app.add_middleware(
 # Include routers
 app.include_router(public_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1/admin", dependencies=[Depends(security)])
+
+# Create an MCP server based on this app
+mcp = FastApiMCP(app)
+mcp.mount()
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
