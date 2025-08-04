@@ -48,20 +48,27 @@ LIST_CACHE_TTL = int(os.getenv("LIST_CACHE_TTL", 43200))  # 12 hours
 
 @router.get("")
 async def api_root():
-    """Return basic API information including version."""
+    """Return JSON-LD service document."""
     return JSONResponse(
         content={
+            "@context": "https://opengeometadata.org/ns/service-context.jsonld",
+            "id": "https://ogm.geo4lib.app/api/v1/service",
             "api": "OpenGeoMetadata API",
             "version": "0.1.0",
-            "description": (
-                "A REST API for accessing geospatial metadata from the OpenGeoMetadata community."
-            ),
-            "endpoints": ["/items", "/search", "/suggest"],
+            "description": "A REST API for accessing geospatial metadata from the OpenGeoMetadata community.",
+            "type": "Service",
+            "label": "OGM API Service Document",
+            "endpoints": {
+                "resources": "/resources/{id}",
+                "search": "/search{?q,page,per_page,sort,callback}",
+                "suggestions": "/suggest{?q,callback}",
+                "validate": "/validate"
+            }
         }
     )
 
 
-@router.get("/items/{id}")
+@router.get("/resources/{id}")
 @cached_endpoint(ttl=ITEM_CACHE_TTL)
 async def get_item(
     id: str,
@@ -121,7 +128,7 @@ async def get_item(
 
             response = {
                 "data": {
-                    "type": "item",
+                    "type": "resource",
                     "id": str(item_dict["id"]),
                     "attributes": item_dict,
                 }
@@ -136,7 +143,7 @@ async def get_item(
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@router.get("/items/")
+@router.get("/resources/")
 @cached_endpoint(ttl=LIST_CACHE_TTL)
 async def list_items(
     skip: int = 0,
