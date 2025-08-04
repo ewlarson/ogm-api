@@ -59,9 +59,9 @@ def create_viewer_attributes(document: Union[Dict, object]) -> Dict:
         geometry = None
 
     return {
-        "ui_viewer_protocol": viewer.viewer_protocol(),
-        "ui_viewer_endpoint": viewer.viewer_endpoint(),
-        "ui_viewer_geometry": geometry,
+        "protocol": viewer.viewer_protocol(),
+        "endpoint": viewer.viewer_endpoint(),
+        "geometry": geometry,
     }
 
 
@@ -84,7 +84,7 @@ class ViewerService:
             geometry = None
 
         return {
-            "ui_viewer_protocol": self.viewer.viewer_protocol(),
-            "ui_viewer_endpoint": self.viewer.viewer_endpoint(),
-            "ui_viewer_geometry": geometry,
+            "protocol": self.viewer.viewer_protocol(),
+            "endpoint": self.viewer.viewer_endpoint(),
+            "geometry": geometry,
         }

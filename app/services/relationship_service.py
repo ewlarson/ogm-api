@@ -10,10 +10,10 @@ class RelationshipService:
     """Service for handling item relationships."""
 
     @staticmethod
-    async def get_item_relationships(item_id: str) -> Dict:
-        """Get all relationships for an item."""
+    async def get_resource_relationships(id: str) -> Dict:
+        """Get all relationships for an resource."""
         try:
-            logger.info(f"Fetching relationships for item: {item_id}")
+            logger.info(f"Fetching relationships for resource: {resource_id}")
 
             # Get outgoing relationships (where item is subject)
             relationships_query = """
@@ -21,7 +21,7 @@ class RelationshipService:
                 FROM item_relationships
                 JOIN items 
                 ON items.id = item_relationships.object_id
-                WHERE subject_id = :item_id
+                WHERE subject_id = :id
                 ORDER BY dct_title_s ASC
             """
             db_relationships = await database.fetch_all(relationships_query, {"item_id": item_id})
@@ -38,7 +38,7 @@ class RelationshipService:
                     {
                         "item_id": rel["object_id"],
                         "item_title": rel["dct_title_s"],
-                        "link": f"/items/{rel['object_id']}",  # Using relative URL
+                        "link": f"/resources/{rel['object_id']}",  # Using relative URL
                     }
                 )
                 logger.debug(f"Added relationship: {rel['predicate']} -> {rel['object_id']}")
