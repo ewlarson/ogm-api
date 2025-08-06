@@ -67,31 +67,11 @@ class SearchService:
             # Process each item
             process_start = time.time()
             docs_processed = 0
-            citation_time = 0
-            thumbnail_time = 0
-            viewer_time = 0
 
             for item in results.get("data", []):
                 doc_start = time.time()
-
-                # Add thumbnail URL
-                thumb_start = time.time()
-                image_service = ImageService(item["attributes"])
-                item["attributes"]["ui_thumbnail_url"] = image_service.get_thumbnail_url()
-                thumbnail_time += time.time() - thumb_start
-
-                # Add citation
-                cite_start = time.time()
-                citation_service = CitationService(item["attributes"])
-                item["attributes"]["ui_citation"] = citation_service.get_citation()
-                citation_time += time.time() - cite_start
-
-                # Add viewer attributes
-                viewer_start = time.time()
-                viewer_attrs = create_viewer_attributes(item["attributes"])
-                item["attributes"].update(viewer_attrs)
-                viewer_time += time.time() - viewer_start
-
+                # Note: UI attributes are now added by process_resource in the endpoints
+                # No need to add them here to avoid duplication
                 docs_processed += 1
 
             process_time = time.time() - process_start
@@ -101,10 +81,7 @@ class SearchService:
                     f"{((process_time / docs_processed) * 1000):.0f}ms"
                     if docs_processed > 0
                     else "0ms"
-                ),
-                "thumbnail_service": f"{(thumbnail_time * 1000):.0f}ms",
-                "citation_service": f"{(citation_time * 1000):.0f}ms",
-                "viewer_service": f"{(viewer_time * 1000):.0f}ms",
+                )
             }
 
             total_time = time.time() - start_time

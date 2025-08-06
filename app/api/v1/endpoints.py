@@ -5,7 +5,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
@@ -57,6 +57,57 @@ def clean_dict(data: dict) -> dict:
     return cleaned
 
 
+def build_pagination_links(base_url: str, current_page: int, total_pages: int, params: dict = None) -> dict:
+    """Build JSON:API pagination links."""
+    # Build query string from params
+    query_parts = []
+    if params:
+        for key, value in params.items():
+            if value is not None and value != "":
+                query_parts.append(f"{key}={value}")
+    
+    query_string = "&".join(query_parts)
+    url_with_params = f"{base_url}?{query_string}" if query_string else base_url
+    
+    links = {
+        "self": f"{url_with_params}&page={current_page}",
+        "first": f"{url_with_params}&page=1",
+        "last": f"{url_with_params}&page={total_pages}" if total_pages > 0 else f"{url_with_params}&page=1"
+    }
+    
+    # Add prev link if not on first page
+    if current_page > 1:
+        links["prev"] = f"{url_with_params}&page={current_page - 1}"
+    
+    # Add next link if not on last page
+    if current_page < total_pages:
+        links["next"] = f"{url_with_params}&page={current_page + 1}"
+    
+    return links
+
+
+def build_jsonapi_response(data: list, links: dict, meta: dict, included: list = None) -> dict:
+    """Build a complete JSON:API response."""
+    response = {
+        "jsonapi": {
+            "version": "1.1",
+            "profile": [
+                "https://opengeometadata.org/profile/aardvark",
+                "https://opengeometadata.org/profile/ui-hints",
+                "https://opengeometadata.org/profile/mcp/search"
+            ]
+        },
+        "links": links,
+        "meta": meta,
+        "data": data
+    }
+    
+    if included:
+        response["included"] = included
+    
+    return response
+
+
 async def process_resource(resource_dict: dict, session: AsyncSession) -> dict:
     """Process a single resource and return the JSON:API formatted object."""
     # Add citation
@@ -71,6 +122,10 @@ async def process_resource(resource_dict: dict, session: AsyncSession) -> dict:
     # Add viewer attributes
     viewer_service = ViewerService(resource_dict)
     viewer_attributes = viewer_service.get_viewer_attributes()
+
+    # Add thumbnail URL
+    image_service = ImageService(resource_dict)
+    thumbnail_url = image_service.get_thumbnail_url()
 
     # Add relationships
     from app.services.relationship_service import RelationshipService
@@ -101,11 +156,6 @@ async def process_resource(resource_dict: dict, session: AsyncSession) -> dict:
         "meta": clean_dict({
             "@context": "https://static.opengeometadata.org/contexts/aardvark-1.0.jsonld",
             "@type": "AardvarkRecord",
-            "geometry": {
-                "locn_geometry": resource_dict.get("locn_geometry"),
-                "dcat_bbox": resource_dict.get("dcat_bbox"),
-                "dcat_centroid": resource_dict.get("dcat_centroid")
-            },
             "human_readable": {
                 "file_size": format_file_size(resource_dict.get("gbl_filesize_s"))
             },
@@ -115,6 +165,7 @@ async def process_resource(resource_dict: dict, session: AsyncSession) -> dict:
                 "downloads": downloads,
                 "relationships": relationships,
                 "summaries": summaries,
+                "thumbnail_url": thumbnail_url,
                 "viewer": {
                     "protocol": viewer_attributes.get("protocol"),
                     "endpoint": viewer_attributes.get("endpoint"),
@@ -262,21 +313,28 @@ async def list_resources(
                     logger.error(f"Error processing resource: {str(e)}", exc_info=True)
                     continue
 
-            # Build the full JSON:API response
-            response = {
-                "jsonapi": {
-                    "version": "1.1",
-                    "profile": [
-                        "https://opengeometadata.org/profile/aardvark",
-                        "https://opengeometadata.org/profile/ui-hints",
-                        "https://opengeometadata.org/profile/mcp/search"
-                    ]
-                },
-                "links": {
-                    "self": f"https://ogm.geo4lib.app/api/v1/resources/?skip={skip}&limit={limit}"
-                },
-                "data": processed_resources
+            # Get total count for pagination
+            count_query = select(func.count(items.c.id))
+            count_result = await session.execute(count_query)
+            total_count = count_result.scalar()
+            total_pages = (total_count + limit - 1) // limit  # Ceiling division
+            current_page = (skip // limit) + 1
+            
+            # Build pagination links
+            base_url = "https://ogm.geo4lib.app/api/v1/resources/"
+            params = {"skip": skip, "limit": limit}
+            links = build_pagination_links(base_url, current_page, total_pages, params)
+            
+            # Build meta information
+            meta = {
+                "totalCount": total_count,
+                "totalPages": total_pages,
+                "currentPage": current_page,
+                "perPage": limit
             }
+            
+            # Build the full JSON:API response
+            response = build_jsonapi_response(processed_resources, links, meta)
 
             logger.info(f"Returning {len(processed_resources)} processed resources")
             return create_response(response, callback)
@@ -309,11 +367,58 @@ async def search(
             callback=callback,
         )
 
-        # Sanitize the results for JSON serialization
-        results = sanitize_for_json(results)
+        # Extract pagination info from existing meta
+        pages_info = results.get("meta", {}).get("pages", {})
+        total_count = pages_info.get("total_count", 0)
+        total_pages = pages_info.get("total_pages", 0)
+        current_page = pages_info.get("current_page", 1)
+
+        # Process each resource to ensure consistent structure
+        processed_resources = []
+        async with async_session() as session:
+            for item in results.get("data", []):
+                try:
+                    # Extract the resource data from the search result
+                    resource_dict = item.get("attributes", {})
+                    if not resource_dict:
+                        continue
+                    
+                    # Process the resource using the same logic as other endpoints
+                    resource_object = await process_resource(resource_dict, session)
+                    processed_resources.append(resource_object)
+                except Exception as e:
+                    logger.error(f"Error processing search result: {str(e)}", exc_info=True)
+                    continue
+
+        # Build JSON:API pagination links
+        base_url = "https://ogm.geo4lib.app/api/v1/search"
+        params = {}
+        if q:
+            params["q"] = q
+        if sort:
+            params["sort"] = sort
+        if per_page != 10:  # Only include if not default
+            params["per_page"] = per_page
+        
+        links = build_pagination_links(base_url, current_page, total_pages, params)
+
+        # Build meta information
+        meta = {
+            "totalCount": total_count,
+            "totalPages": total_pages,
+            "currentPage": current_page,
+            "perPage": per_page,
+            "query": q,
+            "sort": sort,
+            "query_time": results.get("query_time", {}),
+            "spelling_suggestions": results.get("meta", {}).get("spelling_suggestions", [])
+        }
+
+        # Build the response with consistent structure
+        response = build_jsonapi_response(processed_resources, links, meta)
 
         # Create the response
-        response = create_response(results, callback)
+        response = create_response(response, callback)
 
         # Return the response
         return response
