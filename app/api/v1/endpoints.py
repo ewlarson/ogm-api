@@ -417,8 +417,11 @@ async def search(
             "spelling_suggestions": results.get("meta", {}).get("spelling_suggestions", [])
         }
 
+        # Extract included data (facets/aggregations) from search results
+        included = results.get("included", [])
+
         # Build the response with consistent structure
-        response = build_jsonapi_response(processed_resources, links, meta)
+        response = build_jsonapi_response(processed_resources, links, meta, included)
 
         # Create the response
         response = create_response(response, callback)
