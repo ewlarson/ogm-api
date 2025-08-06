@@ -284,11 +284,15 @@ async def get_resource(
 @router.get("/resources/")
 @cached_endpoint(ttl=LIST_CACHE_TTL)
 async def list_resources(
-    skip: int = 0,
-    limit: int = 10,
+    page: int = Query(1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Resources per page (max 100)"),
     callback: Optional[str] = Query(None, description="JSONP callback name"),
 ):
     try:
+        # Convert page/per_page to skip/limit for database query
+        skip = (page - 1) * per_page
+        limit = per_page
+        
         async with async_session() as session:
             query = select(items).offset(skip).limit(limit)
             logger.info(f"Executing query: {query}")
@@ -317,20 +321,19 @@ async def list_resources(
             count_query = select(func.count(items.c.id))
             count_result = await session.execute(count_query)
             total_count = count_result.scalar()
-            total_pages = (total_count + limit - 1) // limit  # Ceiling division
-            current_page = (skip // limit) + 1
+            total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
             
             # Build pagination links
             base_url = "https://ogm.geo4lib.app/api/v1/resources/"
-            params = {"skip": skip, "limit": limit}
-            links = build_pagination_links(base_url, current_page, total_pages, params)
+            params = {"page": page, "per_page": per_page}
+            links = build_pagination_links(base_url, page, total_pages, params)
             
             # Build meta information
             meta = {
                 "totalCount": total_count,
                 "totalPages": total_pages,
-                "currentPage": current_page,
-                "perPage": limit
+                "currentPage": page,
+                "perPage": per_page
             }
             
             # Build the full JSON:API response
@@ -349,7 +352,7 @@ async def search(
     request: Request,
     q: Optional[str] = Query(None, description="Search query"),
     page: int = Query(1, description="Page number"),
-    per_page: int = Query(10, description="Resources per page"),
+    per_page: int = Query(10, ge=1, le=100, description="Resources per page (max 100)"),
     sort: Optional[str] = Query(
         None, description="Sort option (relevance, year_desc, year_asc, title_asc, title_desc)"
     ),
