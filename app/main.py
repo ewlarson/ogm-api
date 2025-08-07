@@ -34,8 +34,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get CORS origins from environment variable
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+# Get CORS origins from environment variable - allow all origins for maximum permissiveness
+cors_origins = ["*"]  # Allow all origins
 
 # Create security scheme
 security = HTTPBasic()
@@ -107,15 +107,15 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-# Add CORS middleware
+# Add CORS middleware - very permissive configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
 
 # Add permissive security headers middleware
