@@ -281,6 +281,36 @@ async def get_resource(
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
+@router.get("/resources/{id}/ogm")
+@cached_endpoint(ttl=ITEM_CACHE_TTL)
+async def get_resource_ogm(
+    id: str,
+    callback: Optional[str] = Query(None, description="JSONP callback name"),
+):
+    """Get just the OpenGeoMetadata Aardvark record for a resource by ID."""
+    try:
+        async with async_session() as session:
+            query = select(items).where(items.c.id == id)
+            result = await session.execute(query)
+            row = result.fetchone()
+            if not row:
+                return JSONResponse(content={"error": "Resource not found"}, status_code=404)
+
+            # Convert to dict and sanitize datetime objects
+            resource_dict = sanitize_for_json(dict(row._mapping))
+
+            # Return just the cleaned attributes (the Aardvark record)
+            aardvark_record = clean_dict(resource_dict)
+
+            return create_response(aardvark_record, callback)
+    except HTTPException:
+        # Re-raise HTTP exceptions to maintain their status code
+        raise
+    except Exception as e:
+        logger.error(f"Error getting Aardvark record for resource {id}: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
 @router.get("/resources/")
 @cached_endpoint(ttl=LIST_CACHE_TTL)
 async def list_resources(
