@@ -4,7 +4,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, HTMLResponse
 from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -533,4 +533,111 @@ async def get_thumbnail(image_hash: str):
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000"},  # Cache for 1 year
     )
+
+
+@router.get("/resources/{id}/viewer")
+async def get_resource_viewer(
+    id: str,
+    theme: Optional[str] = Query("auto", description="Theme: light, dark, or auto"),
+    embed: bool = Query(False, description="Embedded mode for iframe usage"),
+):
+    """Get an HTML page with the embedded OGM viewer for a specific resource."""
+    try:
+        # Build the record URL for the viewer
+        base_url = os.getenv("APPLICATION_URL", "http://localhost:8000")
+        record_url = f"{base_url}/api/v1/resources/{id}/ogm"
+        
+        # Create the HTML content
+        html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OGM Viewer - Resource {id}</title>
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }}
+        .viewer-container {{
+            width: 100vw;
+            height: 100vh;
+        }}
+        {f'.viewer-container {{ height: 600px; }}' if embed else ''}
+    </style>
+</head>
+<body>
+    <div class="viewer-container">
+        <ogm-viewer 
+            record-url="{record_url}"
+            theme="{theme}">
+        </ogm-viewer>
+    </div>
+    
+    <!-- Load the OGM Viewer web component -->
+    <script type="module" src="https://unpkg.com/ogm-viewer"></script>
+</body>
+</html>
+"""
+        
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        logger.error(f"Error creating viewer page for resource {id}: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@router.get("/resources/{id}/viewer/embed")
+async def get_resource_viewer_embed(
+    id: str,
+    theme: Optional[str] = Query("auto", description="Theme: light, dark, or auto"),
+    height: Optional[str] = Query("600px", description="Height of the embedded viewer"),
+    width: Optional[str] = Query("100%", description="Width of the embedded viewer"),
+):
+    """Get an HTML snippet for embedding the OGM viewer in an iframe."""
+    try:
+        # Build the viewer URL
+        base_url = os.getenv("APPLICATION_URL", "http://localhost:8000")
+        viewer_url = f"{base_url}/api/v1/resources/{id}/viewer?embed=true&theme={theme}"
+        
+        # Create the embed HTML
+        embed_html = f"""
+<div style="width: {width}; height: {height}; border: 1px solid #ccc; border-radius: 4px; overflow: hidden;">
+    <iframe 
+        src="{viewer_url}"
+        width="100%"
+        height="100%"
+        frameborder="0"
+        allowfullscreen
+        title="OGM Viewer - Resource {id}">
+    </iframe>
+</div>
+"""
+        
+        return HTMLResponse(content=embed_html)
+    except Exception as e:
+        logger.error(f"Error creating embed snippet for resource {id}: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@router.get("/resources/{id}/viewer/config")
+async def get_resource_viewer_config(id: str):
+    """Get the configuration for embedding the OGM viewer."""
+    try:
+        base_url = os.getenv("APPLICATION_URL", "http://localhost:8000")
+        
+        config = {
+            "record_url": f"{base_url}/api/v1/resources/{id}/ogm",
+            "viewer_url": f"{base_url}/api/v1/resources/{id}/viewer",
+            "embed_url": f"{base_url}/api/v1/resources/{id}/viewer/embed",
+            "embed_html": f'<iframe src="{base_url}/api/v1/resources/{id}/viewer?embed=true" width="100%" height="600px" frameborder="0"></iframe>',
+            "web_component_usage": f'<ogm-viewer record-url="{base_url}/api/v1/resources/{id}/ogm"></ogm-viewer>',
+            "script_tag": '<script type="module" src="https://unpkg.com/ogm-viewer"></script>'
+        }
+        
+        return JSONResponse(content=config)
+    except Exception as e:
+        logger.error(f"Error creating viewer config for resource {id}: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": str(e)}, status_code=500)
     
