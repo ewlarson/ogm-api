@@ -37,7 +37,7 @@ env:
     ENDPOINT_CACHE:        "true"
     GAZETTEER_CACHE_TTL:   "3600"
     APP_MODE:              production
-    APPLICATION_URL:       http://ogm.geo4lib.app/
+    APPLICATION_URL:       https://ogm.geo4lib.app
 
   secret:
     - DATABASE_URL
