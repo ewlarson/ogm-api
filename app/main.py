@@ -9,6 +9,9 @@ from fastapi_mcp import FastApiMCP
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response
 
 from app.api.v1.endpoints import router as public_router
 from app.elasticsearch import close_elasticsearch, init_elasticsearch
@@ -36,6 +39,28 @@ cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 
 # Create security scheme
 security = HTTPBasic()
+
+
+class PermissiveSecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware to set permissive security headers for data reuse and embedding."""
+    
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        
+        # Set permissive Referrer Policy for data reuse
+        response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
+        
+        # Set permissive Content Security Policy for embedding
+        response.headers["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: *; frame-ancestors *;"
+        
+        # Allow embedding in frames
+        response.headers["X-Frame-Options"] = "ALLOWALL"
+        
+        # Remove any restrictive headers that might interfere with embedding
+        if "X-Content-Type-Options" in response.headers:
+            del response.headers["X-Content-Type-Options"]
+        
+        return response
 
 
 @asynccontextmanager
@@ -92,6 +117,9 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600,
 )
+
+# Add permissive security headers middleware
+app.add_middleware(PermissiveSecurityHeadersMiddleware)
 
 # Include routers
 app.include_router(public_router, prefix="/api/v1")
