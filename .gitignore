@@ -180,6 +180,8 @@ data/postgres_test/*
 # Redis data
 data/redis/*
 
+# OpenGeoMetadata data
+tmp/opengeometadata/*
 
 
 
