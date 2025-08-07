@@ -57,6 +57,37 @@ def clean_dict(data: dict) -> dict:
     return cleaned
 
 
+def map_to_aardvark_fields(resource_dict: dict) -> dict:
+    """Map database column names to official Aardvark field names."""
+    # Mapping from database column names to official Aardvark field names
+    field_mapping = {
+        # Most fields already match, but some need mapping
+        "dct_accessrights_s": "dct_accessRights_s",  # Note the capital R
+        "pcdm_memberof_sm": "pcdm_memberOf_sm",  # Note the capital O
+        "gbl_displaynote_sm": "gbl_displayNote_sm",  # Note the capital N
+        "gbl_resourceclass_sm": "gbl_resourceClass_sm",  # Note the capital C
+        "gbl_resourcetype_sm": "gbl_resourceType_sm",  # Note the capital T
+        "gbl_indexyear_im": "gbl_indexYear_im",  # Note the capital Y
+        "gbl_daterange_drsim": "gbl_dateRange_drsim",  # Note the capital R
+        "dct_ispartof_sm": "dct_isPartOf_sm",  # Note the capital P
+        "dct_isversionof_sm": "dct_isVersionOf_sm",  # Note the capital V
+        "dct_isreplacedby_sm": "dct_isReplacedBy_sm",  # Note the capital R
+        "dct_rightsholder_sm": "dct_rightsHolder_sm",  # Note the capital H
+        "gbl_mdmodified_dt": "gbl_mdModified_dt",  # Note the capital M
+        "gbl_mdversion_s": "gbl_mdVersion_s",  # Note the capital V
+        "gbl_filesize_s": "gbl_fileSize_s",  # Note the capital S
+        "gbl_wxsidentifier_s": "gbl_wxsIdentifier_s",  # Note the capital I
+    }
+    
+    mapped_dict = {}
+    for key, value in resource_dict.items():
+        # Use the mapped name if it exists, otherwise use the original key
+        aardvark_key = field_mapping.get(key, key)
+        mapped_dict[aardvark_key] = value
+    
+    return mapped_dict
+
+
 def build_pagination_links(base_url: str, current_page: int, total_pages: int, params: dict = None) -> dict:
     """Build JSON:API pagination links."""
     # Build query string from params
@@ -148,11 +179,14 @@ async def process_resource(resource_dict: dict, session: AsyncSession) -> dict:
     allmaps_attributes = await allmaps_service.get_allmaps_attributes(session)
     logger.info(f"Got Allmaps attributes: {allmaps_attributes}")
 
+    # Map database column names to official Aardvark field names
+    aardvark_attributes = map_to_aardvark_fields(resource_dict)
+    
     # Build the resource object in JSON:API format
     resource_object = {
         "type": "resource",
         "id": str(resource_dict["id"]),
-        "attributes": clean_dict(resource_dict),
+        "attributes": clean_dict(aardvark_attributes),
         "meta": clean_dict({
             "@context": "https://static.opengeometadata.org/contexts/aardvark-1.0.jsonld",
             "@type": "AardvarkRecord",
@@ -299,8 +333,11 @@ async def get_resource_ogm(
             # Convert to dict and sanitize datetime objects
             resource_dict = sanitize_for_json(dict(row._mapping))
 
+            # Map database column names to official Aardvark field names
+            aardvark_attributes = map_to_aardvark_fields(resource_dict)
+
             # Return just the cleaned attributes (the Aardvark record)
-            aardvark_record = clean_dict(resource_dict)
+            aardvark_record = clean_dict(aardvark_attributes)
 
             return create_response(aardvark_record, callback)
     except HTTPException:
