@@ -25,3 +25,5 @@ coverage.xml
 logs/
 elasticsearch-data/
 paradedb-data/ 
+data/*
+tmp/*
