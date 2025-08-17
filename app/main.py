@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi_mcp import FastApiMCP
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic
@@ -134,10 +133,6 @@ async def redirect_root():
 async def redirect_api():
     """Redirect /api path to API docs."""
     return RedirectResponse(url="/api/docs", status_code=302)
-
-# Create an MCP server based on this app
-mcp = FastApiMCP(app)
-mcp.mount()
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
