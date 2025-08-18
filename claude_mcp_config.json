@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ogm-geo4lib": {
+      "command": "node",
+      "args": [
+        "/Users/ewlarson/Python/ewlarson/ogm-api/mcp_websocket_bridge.js"
+      ],
+      "env": {}
+    }
+  }
+}
