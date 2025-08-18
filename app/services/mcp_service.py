@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
+import sys
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.server import Server
@@ -42,24 +43,32 @@ _async_session = None
 def get_async_session():
     """Get the async session factory, creating it if necessary."""
     global _engine, _async_session
-    if _engine is None:
-        _engine = create_async_engine(DATABASE_URL)
-        _async_session = sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
-    return _async_session
+    try:
+        if _engine is None:
+            _engine = create_async_engine(DATABASE_URL)
+            _async_session = sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
+        return _async_session
+    except Exception as e:
+        logger.error(f"Failed to create database session: {e}")
+        raise
 
 class OGMMCPService:
     """MCP service for OpenGeoMetadata API endpoints."""
     
     def __init__(self):
+        logger.info("Initializing OGM MCP Service")
         self.server = Server("ogm-api")
         self._register_tools()
+        logger.info("OGM MCP Service initialized successfully")
     
     def _register_tools(self):
         """Register all API endpoints as MCP tools."""
+        logger.info("Registering MCP tools")
         
         @self.server.list_tools()
         async def handle_list_tools() -> ListToolsResult:
             """List all available tools."""
+            logger.debug("Handling list_tools request")
             return ListToolsResult(
                 tools=[
                     Tool(
@@ -176,6 +185,7 @@ class OGMMCPService:
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             """Handle tool calls."""
+            logger.debug(f"Handling tool call: {name} with arguments: {arguments}")
             try:
                 if name == "search_resources":
                     return await self._search_resources(arguments)
@@ -202,208 +212,271 @@ class OGMMCPService:
                     ],
                     isError=True
                 )
+        
+        logger.info("MCP tools registered successfully")
     
     async def _search_resources(self, arguments: Dict[str, Any]) -> CallToolResult:
         """Search for resources."""
-        query = arguments.get("query")
-        page = arguments.get("page", 1)
-        per_page = arguments.get("per_page", 10)
-        sort = arguments.get("sort")
-        
-        search_service = SearchService()
-        results = await search_service.search(
-            q=query,
-            page=page,
-            limit=per_page,
-            sort=sort,
-            request_query_params="",
-            callback=None,
-        )
-        
-        # Format the results for MCP
-        content = [
-            TextContent(
-                type="text",
-                text=f"Found {len(results.get('data', []))} resources matching '{query}'"
+        try:
+            query = arguments.get("query")
+            page = arguments.get("page", 1)
+            per_page = arguments.get("per_page", 10)
+            sort = arguments.get("sort")
+            
+            search_service = SearchService()
+            results = await search_service.search(
+                q=query,
+                page=page,
+                limit=per_page,
+                sort=sort,
+                request_query_params="",
+                callback=None,
             )
-        ]
-        
-        # Add resource details
-        for item in results.get("data", [])[:5]:  # Limit to first 5 for display
-            attrs = item.get("attributes", {})
-            title = attrs.get("dct_title_s", "Untitled")
-            content.append(
-                TextContent(
-                    type="text",
-                    text=f"- {title} (ID: {item.get('id')})"
-                )
-            )
-        
-        if len(results.get("data", [])) > 5:
-            content.append(
-                TextContent(
-                    type="text",
-                    text=f"... and {len(results.get('data', [])) - 5} more results"
-                )
-            )
-        
-        return CallToolResult(content=content)
-    
-    async def _get_resource(self, arguments: Dict[str, Any]) -> CallToolResult:
-        """Get a single resource."""
-        resource_id = arguments["id"]
-        
-        async with get_async_session()() as session:
-            query = select(items).where(items.c.id == resource_id)
-            result = await session.execute(query)
-            row = result.fetchone()
             
-            if not row:
-                return CallToolResult(
-                    content=[
-                        TextContent(
-                            type="text",
-                            text=f"Resource not found: {resource_id}"
-                        )
-                    ],
-                    isError=True
-                )
-            
-            # Convert to dict
-            resource_dict = dict(row._mapping)
-            
-            # Get basic info
-            title = resource_dict.get("dct_title_s", "Untitled")
-            description = resource_dict.get("dct_description_s", "No description available")
-            
+            # Format the results for MCP
             content = [
                 TextContent(
                     type="text",
-                    text=f"Resource: {title}\n\nDescription: {description}\n\nID: {resource_id}"
-                )
-            ]
-            
-            # Add citation if available
-            try:
-                citation_service = CitationService(resource_dict)
-                citation = citation_service.get_citation()
-                if citation:
-                    content.append(
-                        TextContent(
-                            type="text",
-                            text=f"\nCitation:\n{citation}"
-                        )
-                    )
-            except Exception as e:
-                logger.warning(f"Could not generate citation: {e}")
-            
-            return CallToolResult(content=content)
-    
-    async def _get_resource_ogm(self, arguments: Dict[str, Any]) -> CallToolResult:
-        """Get Aardvark record for a resource."""
-        resource_id = arguments["id"]
-        
-        async with get_async_session()() as session:
-            query = select(items).where(items.c.id == resource_id)
-            result = await session.execute(query)
-            row = result.fetchone()
-            
-            if not row:
-                return CallToolResult(
-                    content=[
-                        TextContent(
-                            type="text",
-                            text=f"Resource not found: {resource_id}"
-                        )
-                    ],
-                    isError=True
-                )
-            
-            # Convert to dict and return as JSON
-            resource_dict = dict(row._mapping)
-            
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=f"Aardvark record for resource {resource_id}:\n{str(resource_dict)}"
-                    )
-                ]
-            )
-    
-    async def _list_resources(self, arguments: Dict[str, Any]) -> CallToolResult:
-        """List resources with pagination."""
-        page = arguments.get("page", 1)
-        per_page = arguments.get("per_page", 10)
-        
-        skip = (page - 1) * per_page
-        limit = per_page
-        
-        async with get_async_session()() as session:
-            query = select(items).offset(skip).limit(limit)
-            result = await session.execute(query)
-            results = result.fetchall()
-            
-            # Get total count
-            count_query = select(func.count(items.c.id))
-            count_result = await session.execute(count_query)
-            total_count = count_result.scalar()
-            
-            content = [
-                TextContent(
-                    type="text",
-                    text=f"Showing {len(results)} of {total_count} total resources (page {page})"
+                    text=f"Found {len(results.get('data', []))} resources matching '{query}'"
                 )
             ]
             
             # Add resource details
-            for row in results:
-                resource_dict = dict(row._mapping)
-                title = resource_dict.get("dct_title_s", "Untitled")
+            for item in results.get("data", [])[:5]:  # Limit to first 5 for display
+                attrs = item.get("attributes", {})
+                title = attrs.get("dct_title_s", "Untitled")
                 content.append(
                     TextContent(
                         type="text",
-                        text=f"- {title} (ID: {resource_dict.get('id')})"
+                        text=f"- {title} (ID: {item.get('id')})"
+                    )
+                )
+            
+            if len(results.get("data", [])) > 5:
+                content.append(
+                    TextContent(
+                        type="text",
+                        text=f"... and {len(results.get('data', [])) - 5} more results"
                     )
                 )
             
             return CallToolResult(content=content)
+        except Exception as e:
+            logger.error(f"Error in _search_resources: {e}", exc_info=True)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Error searching resources: {str(e)}"
+                    )
+                ],
+                isError=True
+            )
+    
+    async def _get_resource(self, arguments: Dict[str, Any]) -> CallToolResult:
+        """Get a single resource."""
+        try:
+            resource_id = arguments["id"]
+            
+            async with get_async_session()() as session:
+                query = select(items).where(items.c.id == resource_id)
+                result = await session.execute(query)
+                row = result.fetchone()
+                
+                if not row:
+                    return CallToolResult(
+                        content=[
+                            TextContent(
+                                type="text",
+                                text=f"Resource not found: {resource_id}"
+                            )
+                        ],
+                        isError=True
+                    )
+                
+                # Convert to dict
+                resource_dict = dict(row._mapping)
+                
+                # Get basic info
+                title = resource_dict.get("dct_title_s", "Untitled")
+                description = resource_dict.get("dct_description_s", "No description available")
+                
+                content = [
+                    TextContent(
+                        type="text",
+                        text=f"Resource: {title}\n\nDescription: {description}\n\nID: {resource_id}"
+                    )
+                ]
+                
+                # Add citation if available
+                try:
+                    citation_service = CitationService(resource_dict)
+                    citation = citation_service.get_citation()
+                    if citation:
+                        content.append(
+                            TextContent(
+                                type="text",
+                                text=f"\nCitation:\n{citation}"
+                            )
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not generate citation: {e}")
+                
+                return CallToolResult(content=content)
+        except Exception as e:
+            logger.error(f"Error in _get_resource: {e}", exc_info=True)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Error getting resource: {str(e)}"
+                    )
+                ],
+                isError=True
+            )
+    
+    async def _get_resource_ogm(self, arguments: Dict[str, Any]) -> CallToolResult:
+        """Get Aardvark record for a resource."""
+        try:
+            resource_id = arguments["id"]
+            
+            async with get_async_session()() as session:
+                query = select(items).where(items.c.id == resource_id)
+                result = await session.execute(query)
+                row = result.fetchone()
+                
+                if not row:
+                    return CallToolResult(
+                        content=[
+                            TextContent(
+                                type="text",
+                                text=f"Resource not found: {resource_id}"
+                            )
+                        ],
+                        isError=True
+                    )
+                
+                # Convert to dict and return as JSON
+                resource_dict = dict(row._mapping)
+                
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text=f"Aardvark record for resource {resource_id}:\n{str(resource_dict)}"
+                        )
+                    ]
+                )
+        except Exception as e:
+            logger.error(f"Error in _get_resource_ogm: {e}", exc_info=True)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Error getting resource OGM: {str(e)}"
+                    )
+                ],
+                isError=True
+            )
+    
+    async def _list_resources(self, arguments: Dict[str, Any]) -> CallToolResult:
+        """List resources with pagination."""
+        try:
+            page = arguments.get("page", 1)
+            per_page = arguments.get("per_page", 10)
+            
+            skip = (page - 1) * per_page
+            limit = per_page
+            
+            async with get_async_session()() as session:
+                query = select(items).offset(skip).limit(limit)
+                result = await session.execute(query)
+                results = result.fetchall()
+                
+                # Get total count
+                count_query = select(func.count(items.c.id))
+                count_result = await session.execute(count_query)
+                total_count = count_result.scalar()
+                
+                content = [
+                    TextContent(
+                        type="text",
+                        text=f"Showing {len(results)} of {total_count} total resources (page {page})"
+                    )
+                ]
+                
+                # Add resource details
+                for row in results:
+                    resource_dict = dict(row._mapping)
+                    title = resource_dict.get("dct_title_s", "Untitled")
+                    content.append(
+                        TextContent(
+                            type="text",
+                            text=f"- {title} (ID: {resource_dict.get('id')})"
+                        )
+                    )
+                
+                return CallToolResult(content=content)
+        except Exception as e:
+            logger.error(f"Error in _list_resources: {e}", exc_info=True)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Error listing resources: {str(e)}"
+                    )
+                ],
+                isError=True
+            )
     
     async def _get_suggestions(self, arguments: Dict[str, Any]) -> CallToolResult:
         """Get search suggestions."""
-        query = arguments["query"]
-        
-        search_service = SearchService()
-        suggestions = await search_service.suggest(query)
-        
-        content = [
-            TextContent(
-                type="text",
-                text=f"Suggestions for '{query}':"
-            )
-        ]
-        
-        for suggestion in suggestions.get("suggestions", []):
-            content.append(
+        try:
+            query = arguments["query"]
+            
+            search_service = SearchService()
+            suggestions = await search_service.suggest(query)
+            
+            content = [
                 TextContent(
                     type="text",
-                    text=f"- {suggestion}"
+                    text=f"Suggestions for '{query}':"
                 )
+            ]
+            
+            for suggestion in suggestions.get("suggestions", []):
+                content.append(
+                    TextContent(
+                        type="text",
+                        text=f"- {suggestion}"
+                    )
+                )
+            
+            return CallToolResult(content=content)
+        except Exception as e:
+            logger.error(f"Error in _get_suggestions: {e}", exc_info=True)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Error getting suggestions: {str(e)}"
+                    )
+                ],
+                isError=True
             )
-        
-        return CallToolResult(content=content)
     
     async def _get_resource_viewer(self, arguments: Dict[str, Any]) -> CallToolResult:
         """Get viewer HTML for a resource."""
-        resource_id = arguments["id"]
-        embed = arguments.get("embed", False)
-        
-        # Build the record URL for the viewer
-        base_url = "http://localhost:8000"
-        record_url = f"{base_url}/api/v1/resources/{resource_id}/ogm"
-        
-        # Create the HTML content
-        html_content = f"""
+        try:
+            resource_id = arguments["id"]
+            embed = arguments.get("embed", False)
+            
+            # Build the record URL for the viewer
+            base_url = "http://localhost:8000"
+            record_url = f"{base_url}/api/v1/resources/{resource_id}/ogm"
+            
+            # Create the HTML content
+            html_content = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -436,33 +509,61 @@ class OGMMCPService:
 </body>
 </html>
 """
-        
-        return CallToolResult(
-            content=[
-                TextContent(
-                    type="text",
-                    text=f"Viewer HTML for resource {resource_id}:\n\n{html_content}"
-                )
-            ]
-        )
+            
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Viewer HTML for resource {resource_id}:\n\n{html_content}"
+                    )
+                ]
+            )
+        except Exception as e:
+            logger.error(f"Error in _get_resource_viewer: {e}", exc_info=True)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Error getting resource viewer: {str(e)}"
+                    )
+                ],
+                isError=True
+            )
 
 # Create global service instance
 mcp_service = OGMMCPService()
 
 async def run_mcp_server():
     """Run the MCP server via stdio."""
-    async with stdio_server() as (read_stream, write_stream):
-        await mcp_service.server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="ogm-api",
-                server_version="0.1.0",
-                capabilities=ServerCapabilities(
-                    tools=ToolsCapability()
+    logger.info("Starting MCP server")
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            logger.info("MCP stdio server started, running server")
+            # Add timeout to prevent hanging
+            await asyncio.wait_for(
+                mcp_service.server.run(
+                    read_stream,
+                    write_stream,
+                    InitializationOptions(
+                        server_name="ogm-api",
+                        server_version="0.1.0",
+                        capabilities=ServerCapabilities(
+                            tools=ToolsCapability()
+                        ),
+                    ),
                 ),
-            ),
-        )
+                timeout=300  # 5 minute timeout
+            )
+    except asyncio.TimeoutError:
+        logger.info("MCP server timeout - client may have disconnected")
+    except BrokenPipeError:
+        logger.info("Client disconnected (broken pipe)")
+    except ConnectionResetError:
+        logger.info("Client connection reset")
+    except Exception as e:
+        logger.error(f"Error in MCP server: {e}", exc_info=True)
+    finally:
+        logger.info("MCP server shutdown complete")
 
 async def run_mcp_websocket_server(websocket):
     """Run the MCP server via WebSocket."""
@@ -623,4 +724,12 @@ async def handle_mcp_message(data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 if __name__ == "__main__":
-    asyncio.run(run_mcp_server())
+    try:
+        asyncio.run(run_mcp_server())
+    except KeyboardInterrupt:
+        logger.info("MCP server interrupted by user")
+    except BrokenPipeError:
+        logger.info("MCP server terminated due to broken pipe")
+    except Exception as e:
+        logger.error(f"Fatal error in MCP server: {e}", exc_info=True)
+        sys.exit(1)
