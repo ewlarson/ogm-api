@@ -21,7 +21,9 @@ class MCPWebSocketBridge {
     // Connect to WebSocket MCP server
     async connect() {
         return new Promise((resolve, reject) => {
-            this.ws = new WebSocket(MCP_WEBSOCKET_URL);
+            this.ws = new WebSocket(MCP_WEBSOCKET_URL, {
+                maxPayload: 10 * 1024 * 1024  // 10MB max payload
+            });
 
             this.ws.on('open', () => {
                 console.error('Connected to MCP WebSocket server');

@@ -233,34 +233,39 @@ class OGMMCPService:
                 callback=None,
             )
             
-            # Format the results for MCP
-            content = [
-                TextContent(
-                    type="text",
-                    text=f"Found {len(results.get('data', []))} resources matching '{query}'"
-                )
-            ]
+            # Process each resource to get full details
+            processed_resources = []
+            async with get_async_session()() as session:
+                for item in results.get("data", []):
+                    try:
+                        # Extract the resource data from the search result
+                        resource_dict = item.get("attributes", {})
+                        if not resource_dict:
+                            continue
+                        
+                        # Process the resource using the same logic as API endpoints
+                        from app.api.v1.endpoints import process_resource
+                        resource_object = await process_resource(resource_dict, session)
+                        processed_resources.append(resource_object)
+                    except Exception as e:
+                        logger.error(f"Error processing search result: {str(e)}", exc_info=True)
+                        continue
             
-            # Add resource details
-            for item in results.get("data", [])[:5]:  # Limit to first 5 for display
-                attrs = item.get("attributes", {})
-                title = attrs.get("dct_title_s", "Untitled")
-                content.append(
+            # Return the full resource objects as JSON
+            return CallToolResult(
+                content=[
                     TextContent(
                         type="text",
-                        text=f"- {title} (ID: {item.get('id')})"
+                        text=json.dumps({
+                            "query": query,
+                            "total_results": len(results.get("data", [])),
+                            "page": page,
+                            "per_page": per_page,
+                            "resources": processed_resources
+                        }, indent=2)
                     )
-                )
-            
-            if len(results.get("data", [])) > 5:
-                content.append(
-                    TextContent(
-                        type="text",
-                        text=f"... and {len(results.get('data', [])) - 5} more results"
-                    )
-                )
-            
-            return CallToolResult(content=content)
+                ]
+            )
         except Exception as e:
             logger.error(f"Error in _search_resources: {e}", exc_info=True)
             return CallToolResult(
@@ -294,35 +299,23 @@ class OGMMCPService:
                         isError=True
                     )
                 
-                # Convert to dict
-                resource_dict = dict(row._mapping)
+                # Convert to dict and sanitize datetime objects
+                from app.api.v1.utils import sanitize_for_json
+                resource_dict = sanitize_for_json(dict(row._mapping))
                 
-                # Get basic info
-                title = resource_dict.get("dct_title_s", "Untitled")
-                description = resource_dict.get("dct_description_s", "No description available")
+                # Process the resource using the same logic as API endpoints
+                from app.api.v1.endpoints import process_resource
+                resource_object = await process_resource(resource_dict, session)
                 
-                content = [
-                    TextContent(
-                        type="text",
-                        text=f"Resource: {title}\n\nDescription: {description}\n\nID: {resource_id}"
-                    )
-                ]
-                
-                # Add citation if available
-                try:
-                    citation_service = CitationService(resource_dict)
-                    citation = citation_service.get_citation()
-                    if citation:
-                        content.append(
-                            TextContent(
-                                type="text",
-                                text=f"\nCitation:\n{citation}"
-                            )
+                # Return the full resource object as JSON
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text=json.dumps(resource_object, indent=2)
                         )
-                except Exception as e:
-                    logger.warning(f"Could not generate citation: {e}")
-                
-                return CallToolResult(content=content)
+                    ]
+                )
         except Exception as e:
             logger.error(f"Error in _get_resource: {e}", exc_info=True)
             return CallToolResult(
@@ -356,14 +349,21 @@ class OGMMCPService:
                         isError=True
                     )
                 
-                # Convert to dict and return as JSON
-                resource_dict = dict(row._mapping)
+                # Convert to dict and sanitize datetime objects
+                from app.api.v1.utils import sanitize_for_json
+                resource_dict = sanitize_for_json(dict(row._mapping))
                 
+                # Map database column names to official Aardvark field names
+                from app.api.v1.endpoints import map_to_aardvark_fields, clean_dict
+                aardvark_attributes = map_to_aardvark_fields(resource_dict)
+                aardvark_record = clean_dict(aardvark_attributes)
+                
+                # Return the cleaned Aardvark record as JSON
                 return CallToolResult(
                     content=[
                         TextContent(
                             type="text",
-                            text=f"Aardvark record for resource {resource_id}:\n{str(resource_dict)}"
+                            text=json.dumps(aardvark_record, indent=2)
                         )
                     ]
                 )
@@ -398,25 +398,37 @@ class OGMMCPService:
                 count_result = await session.execute(count_query)
                 total_count = count_result.scalar()
                 
-                content = [
-                    TextContent(
-                        type="text",
-                        text=f"Showing {len(results)} of {total_count} total resources (page {page})"
-                    )
-                ]
-                
-                # Add resource details
+                # Process each resource to get full details
+                processed_resources = []
                 for row in results:
-                    resource_dict = dict(row._mapping)
-                    title = resource_dict.get("dct_title_s", "Untitled")
-                    content.append(
+                    try:
+                        # Convert to dict and sanitize datetime objects
+                        from app.api.v1.utils import sanitize_for_json
+                        resource_dict = sanitize_for_json(dict(row._mapping))
+                        
+                        # Process the resource using the same logic as API endpoints
+                        from app.api.v1.endpoints import process_resource
+                        resource_object = await process_resource(resource_dict, session)
+                        processed_resources.append(resource_object)
+                    except Exception as e:
+                        logger.error(f"Error processing resource: {str(e)}", exc_info=True)
+                        continue
+                
+                # Return the full resource objects as JSON
+                return CallToolResult(
+                    content=[
                         TextContent(
                             type="text",
-                            text=f"- {title} (ID: {resource_dict.get('id')})"
+                            text=json.dumps({
+                                "page": page,
+                                "per_page": per_page,
+                                "total_count": total_count,
+                                "total_pages": (total_count + per_page - 1) // per_page,
+                                "resources": processed_resources
+                            }, indent=2)
                         )
-                    )
-                
-                return CallToolResult(content=content)
+                    ]
+                )
         except Exception as e:
             logger.error(f"Error in _list_resources: {e}", exc_info=True)
             return CallToolResult(
@@ -642,6 +654,17 @@ async def handle_mcp_message(data: Dict[str, Any]) -> Dict[str, Any]:
                 }
             },
             {
+                "name": "get_resource_ogm",
+                "description": "Get just the OpenGeoMetadata Aardvark record for a resource by ID",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "Resource ID"}
+                    },
+                    "required": ["id"]
+                }
+            },
+            {
                 "name": "list_resources",
                 "description": "List all geospatial resources with pagination",
                 "inputSchema": {
@@ -650,6 +673,29 @@ async def handle_mcp_message(data: Dict[str, Any]) -> Dict[str, Any]:
                         "page": {"type": "integer", "description": "Page number (default: 1)", "default": 1},
                         "per_page": {"type": "integer", "description": "Resources per page (max 100, default: 10)", "default": 10}
                     }
+                }
+            },
+            {
+                "name": "get_suggestions",
+                "description": "Get search suggestions for autocomplete",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query for suggestions"}
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "get_resource_viewer",
+                "description": "Get an HTML page with the embedded OGM viewer for a specific resource",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "Resource ID"},
+                        "embed": {"type": "boolean", "description": "Embedded mode for iframe usage", "default": False}
+                    },
+                    "required": ["id"]
                 }
             }
         ]
@@ -671,8 +717,14 @@ async def handle_mcp_message(data: Dict[str, Any]) -> Dict[str, Any]:
                 result = await mcp_service._search_resources(arguments)
             elif tool_name == "get_resource":
                 result = await mcp_service._get_resource(arguments)
+            elif tool_name == "get_resource_ogm":
+                result = await mcp_service._get_resource_ogm(arguments)
             elif tool_name == "list_resources":
                 result = await mcp_service._list_resources(arguments)
+            elif tool_name == "get_suggestions":
+                result = await mcp_service._get_suggestions(arguments)
+            elif tool_name == "get_resource_viewer":
+                result = await mcp_service._get_resource_viewer(arguments)
             else:
                 return {
                     "jsonrpc": "2.0",
@@ -684,6 +736,31 @@ async def handle_mcp_message(data: Dict[str, Any]) -> Dict[str, Any]:
                 }
             
             # Convert CallToolResult to JSON-RPC response
+            # Handle the case where we have a single JSON response
+            if len(result.content) == 1 and hasattr(result.content[0], 'text'):
+                content_text = result.content[0].text
+                # Try to parse as JSON to ensure proper formatting
+                try:
+                    json.loads(content_text)
+                    # If it's valid JSON, return it as-is
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": msg_id,
+                        "result": {
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": content_text
+                                }
+                            ],
+                            "isError": result.isError if hasattr(result, 'isError') else False
+                        }
+                    }
+                except json.JSONDecodeError:
+                    # If it's not JSON, fall back to the original behavior
+                    pass
+            
+            # Fallback: concatenate all content items
             content_text = ""
             for content_item in result.content:
                 if hasattr(content_item, 'text'):
