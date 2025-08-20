@@ -9,6 +9,38 @@ from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
+import json
+import jsonschema
+from jsonschema import validate, ValidationError
+import requests
+from pydantic import BaseModel, Field
+
+# Pydantic models for request/response
+class AardvarkRecord(BaseModel):
+    """Aardvark metadata record for validation."""
+    id: Optional[str] = Field(None, description="Unique identifier for the record")
+    dct_title_s: Optional[str] = Field(None, description="Title of the resource")
+    dct_description_s: Optional[str] = Field(None, description="Description of the resource")
+    gbl_mdVersion_s: Optional[str] = Field(None, description="Metadata version (must be 'Aardvark')")
+    dct_accessRights_s: Optional[str] = Field(None, description="Access rights for the resource")
+    dcat_bbox: Optional[str] = Field(None, description="Bounding box in ENVELOPE format")
+    dct_creator_sm: Optional[list] = Field(None, description="List of creators")
+    dct_publisher_s: Optional[str] = Field(None, description="Publisher of the resource")
+    dct_issued_s: Optional[str] = Field(None, description="Date issued")
+    dct_language_sm: Optional[list] = Field(None, description="List of languages")
+    dct_subject_sm: Optional[list] = Field(None, description="List of subjects")
+    gbl_resourceClass_sm: Optional[list] = Field(None, description="List of resource classes")
+    gbl_resourceType_sm: Optional[list] = Field(None, description="List of resource types")
+    
+    class Config:
+        extra = "allow"  # Allow additional fields not defined in the model
+
+class ValidationResponse(BaseModel):
+    """Response model for validation results."""
+    valid: bool = Field(..., description="Whether the record is valid")
+    errors: list = Field(..., description="List of validation errors")
+    warnings: list = Field(..., description="List of validation warnings")
+    profile: list = Field(..., description="Profile information")
 
 
 def format_file_size(size_str: Optional[str]) -> Optional[str]:
@@ -603,7 +635,8 @@ async def mcp_endpoint():
                     "get_resource_ogm",
                     "list_resources",
                     "get_suggestions",
-                    "get_resource_viewer"
+                    "get_resource_viewer",
+                    "validate_aardvark_record"
                 ]
             },
             "connections": {
@@ -624,11 +657,123 @@ async def mcp_endpoint():
                     "get_resource_ogm": "Get just the OpenGeoMetadata Aardvark record for a resource by ID",
                     "list_resources": "List all geospatial resources with pagination",
                     "get_suggestions": "Get search suggestions for autocomplete",
-                    "get_resource_viewer": "Get an HTML page with the embedded OGM viewer for a specific resource"
+                    "get_resource_viewer": "Get an HTML page with the embedded OGM viewer for a specific resource",
+                    "validate_aardvark_record": "Validate a single Aardvark JSON record against the OpenGeoMetadata schema"
                 }
             }
         }
     )
+
+
+@router.post("/validate", response_model=ValidationResponse)
+async def validate_aardvark_record(request_body: AardvarkRecord):
+    """Validate a single Aardvark JSON record against the OpenGeoMetadata schema."""
+    try:
+        # Get the JSON body from the request and exclude None values
+        record = request_body.dict(exclude_none=True)
+        
+        # Fetch the Aardvark schema from OpenGeoMetadata
+        schema_url = "https://opengeometadata.org/schema/geoblacklight-schema-aardvark.json"
+        try:
+            response = requests.get(schema_url, timeout=10)
+            response.raise_for_status()
+            schema = response.json()
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch schema from {schema_url}: {e}")
+            return ValidationResponse(
+                valid=False,
+                errors=[{"field": "schema", "message": f"Failed to fetch schema: {str(e)}"}],
+                warnings=[],
+                profile=[
+                    "https://opengeometadata.org/profile/aardvark",
+                    "https://opengeometadata.org/profile/mcp/validate"
+                ]
+            )
+        
+        # Validate the record against the schema
+        errors = []
+        warnings = []
+        schema_valid = True
+        
+        try:
+            validate(instance=record, schema=schema)
+        except ValidationError as e:
+            schema_valid = False
+            # Parse validation errors
+            for error in e.context:
+                field_path = " -> ".join(str(p) for p in error.path) if error.path else "root"
+                errors.append({
+                    "field": field_path,
+                    "message": error.message
+                })
+            # Also include the main error
+            main_field = " -> ".join(str(p) for p in e.path) if e.path else "root"
+            errors.append({
+                "field": main_field,
+                "message": e.message
+            })
+        
+        # Additional custom validations for Aardvark-specific requirements
+        # Check for required fields that might not be in the schema
+        required_fields = [
+            "dct_title_s",
+            "gbl_mdVersion_s"
+        ]
+        
+        for field in required_fields:
+            if field not in record or not record[field]:
+                # Only add custom error if not already in schema errors
+                field_error_exists = any(e.get('field') == field for e in errors)
+                if not field_error_exists:
+                    errors.append({
+                        "field": field,
+                        "message": f"This field is required and must be a non-empty string."
+                    })
+        
+        # Check specific field values
+        if "gbl_mdVersion_s" in record and record["gbl_mdVersion_s"] != "Aardvark":
+            # Only add custom error if not already in schema errors
+            version_error_exists = any(e.get('field') == 'gbl_mdVersion_s' and 'Aardvark' in e.get('message', '') for e in errors)
+            if not version_error_exists:
+                errors.append({
+                    "field": "gbl_mdVersion_s",
+                    "message": "Value must be 'Aardvark'."
+                })
+        
+        # Check for common warnings (only if schema validation passed)
+        if schema_valid:
+            if "dcat_bbox" not in record and "solr_geom" not in record:
+                warnings.append({
+                    "field": "spatial_coverage",
+                    "message": "Spatial coverage information is recommended (dcat_bbox or solr_geom)."
+                })
+        
+        # Determine overall validity - record is valid if there are no errors
+        valid = len(errors) == 0
+        
+        # Build the response
+        return ValidationResponse(
+            valid=valid,
+            errors=errors,
+            warnings=warnings,
+            profile=[
+                "https://opengeometadata.org/profile/aardvark",
+                "https://opengeometadata.org/profile/mcp/validate"
+            ]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error validating record: {str(e)}", exc_info=True)
+        return ValidationResponse(
+            valid=False,
+            errors=[{"field": "validation", "message": f"Validation error: {str(e)}"}],
+            warnings=[],
+            profile=[
+                "https://opengeometadata.org/profile/aardvark",
+                "https://opengeometadata.org/profile/mcp/validate"
+            ]
+        )
+
 
 @router.websocket("/mcp/ws")
 async def mcp_websocket_endpoint(websocket: WebSocket):

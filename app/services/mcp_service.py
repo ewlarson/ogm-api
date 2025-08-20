@@ -178,6 +178,20 @@ class OGMMCPService:
                             },
                             "required": ["id"]
                         }
+                    ),
+                    Tool(
+                        name="validate_aardvark_record",
+                        description="Validate a single Aardvark JSON record against the OpenGeoMetadata schema",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {
+                                "record": {
+                                    "type": "object",
+                                    "description": "The Aardvark JSON record to validate"
+                                }
+                            },
+                            "required": ["record"]
+                        }
                     )
                 ]
             )
@@ -199,6 +213,8 @@ class OGMMCPService:
                     return await self._get_suggestions(arguments)
                 elif name == "get_resource_viewer":
                     return await self._get_resource_viewer(arguments)
+                elif name == "validate_aardvark_record":
+                    return await self._validate_aardvark_record(arguments)
                 else:
                     raise ValueError(f"Unknown tool: {name}")
             except Exception as e:
@@ -537,6 +553,125 @@ class OGMMCPService:
                     TextContent(
                         type="text",
                         text=f"Error getting resource viewer: {str(e)}"
+                    )
+                ],
+                isError=True
+            )
+
+    async def _validate_aardvark_record(self, arguments: Dict[str, Any]) -> CallToolResult:
+        """Validate an Aardvark JSON record."""
+        try:
+            import requests
+            import json
+            import jsonschema
+            from jsonschema import validate, ValidationError
+            
+            record = arguments.get("record")
+            if not record:
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text="Error: No record provided for validation"
+                        )
+                    ],
+                    isError=True
+                )
+            
+            # Fetch the Aardvark schema from OpenGeoMetadata
+            schema_url = "https://opengeometadata.org/schema/geoblacklight-schema-aardvark.json"
+            try:
+                response = requests.get(schema_url, timeout=10)
+                response.raise_for_status()
+                schema = response.json()
+            except requests.RequestException as e:
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text=f"Error: Failed to fetch schema: {str(e)}"
+                        )
+                    ],
+                    isError=True
+                )
+            
+            # Validate the record against the schema
+            errors = []
+            warnings = []
+            schema_valid = True
+            
+            try:
+                validate(instance=record, schema=schema)
+            except ValidationError as e:
+                schema_valid = False
+                # Parse validation errors
+                for error in e.context:
+                    field_path = " -> ".join(str(p) for p in error.path) if error.path else "root"
+                    errors.append(f"{field_path}: {error.message}")
+                # Also include the main error
+                main_field = " -> ".join(str(p) for p in e.path) if e.path else "root"
+                errors.append(f"{main_field}: {e.message}")
+            
+            # Additional custom validations for Aardvark-specific requirements
+            # Check for required fields that might not be in the schema
+            required_fields = [
+                "dct_title_s",
+                "gbl_mdVersion_s"
+            ]
+            
+            for field in required_fields:
+                if field not in record or not record[field]:
+                    errors.append(f"{field}: This field is required and must be a non-empty string.")
+            
+            # Check specific field values
+            if "gbl_mdVersion_s" in record and record["gbl_mdVersion_s"] != "Aardvark":
+                errors.append("gbl_mdVersion_s: Value must be 'Aardvark'.")
+            
+            # Check for common warnings (only if schema validation passed)
+            if schema_valid:
+                if "dct_description_s" not in record or not record.get("dct_description_s"):
+                    warnings.append("dct_description_s: Description is recommended for better discoverability.")
+                
+                if "dcat_bbox" not in record and "solr_geom" not in record:
+                    warnings.append("spatial_coverage: Spatial coverage information is recommended (dcat_bbox or solr_geom).")
+            
+            # Determine overall validity
+            valid = len(errors) == 0
+            
+            # Build the response text
+            result_text = f"Validation Result: {'VALID' if valid else 'INVALID'}\n\n"
+            
+            if errors:
+                result_text += "Errors:\n"
+                for error in errors:
+                    result_text += f"  - {error}\n"
+                result_text += "\n"
+            
+            if warnings:
+                result_text += "Warnings:\n"
+                for warning in warnings:
+                    result_text += f"  - {warning}\n"
+                result_text += "\n"
+            
+            if valid and not warnings:
+                result_text += "✅ Record is valid and follows Aardvark schema requirements."
+            
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=result_text
+                    )
+                ]
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in _validate_aardvark_record: {e}", exc_info=True)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Error validating record: {str(e)}"
                     )
                 ],
                 isError=True
