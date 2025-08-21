@@ -235,7 +235,7 @@ class OGMMCPService:
                             continue
 
                         # Process the resource using the same logic as API endpoints
-                        from app.api.v1.endpoints import process_resource
+                        from app.api.v1.utils import process_resource
 
                         resource_object = await process_resource(resource_dict, session)
                         processed_resources.append(resource_object)
@@ -292,7 +292,7 @@ class OGMMCPService:
                 resource_dict = sanitize_for_json(dict(row._mapping))
 
                 # Process the resource using the same logic as API endpoints
-                from app.api.v1.endpoints import process_resource
+                from app.api.v1.utils import process_resource
 
                 resource_object = await process_resource(resource_dict, session)
 
@@ -331,7 +331,7 @@ class OGMMCPService:
                 resource_dict = sanitize_for_json(dict(row._mapping))
 
                 # Map database column names to official Aardvark field names
-                from app.api.v1.endpoints import clean_dict, map_to_aardvark_fields
+                from app.api.v1.endpoint_modules.utils import clean_dict, map_to_aardvark_fields
 
                 aardvark_attributes = map_to_aardvark_fields(resource_dict)
                 aardvark_record = clean_dict(aardvark_attributes)
@@ -771,6 +771,20 @@ async def handle_mcp_message(data: Dict[str, Any]) -> Dict[str, Any]:
                     "required": ["id"],
                 },
             },
+            {
+                "name": "validate_aardvark_record",
+                "description": "Validate a single Aardvark JSON record against the OpenGeoMetadata schema",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "record": {
+                            "type": "object",
+                            "description": "The Aardvark JSON record to validate",
+                        }
+                    },
+                    "required": ["record"],
+                },
+            },
         ]
 
         return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": tools}}
@@ -792,6 +806,8 @@ async def handle_mcp_message(data: Dict[str, Any]) -> Dict[str, Any]:
                 result = await mcp_service._get_suggestions(arguments)
             elif tool_name == "get_resource_viewer":
                 result = await mcp_service._get_resource_viewer(arguments)
+            elif tool_name == "validate_aardvark_record":
+                result = await mcp_service._validate_aardvark_record(arguments)
             else:
                 return {
                     "jsonrpc": "2.0",
