@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, Optional
 
 from fastapi.responses import JSONResponse
 
@@ -42,3 +42,21 @@ class JSONPResponse(BaseJSONResponse):
         json_str = super().render(content).decode()
         jsonp = f"{self.callback}({json_str})"
         return jsonp.encode("utf-8")
+
+
+def create_response(
+    content: Dict | JSONResponse, callback: Optional[str] = None, status_code: int = 200
+) -> JSONResponse:
+    """Create either a JSON or JSONP response based on callback parameter."""
+    # If content is already a JSONResponse, return it as is
+    if isinstance(content, JSONResponse):
+        return content
+
+    # Sanitize content before serialization
+    from app.api.v1.utils import sanitize_for_json
+
+    sanitized_content = sanitize_for_json(content)
+
+    if callback:
+        return JSONPResponse(content=sanitized_content, callback=callback, status_code=status_code)
+    return JSONResponse(content=sanitized_content, status_code=status_code)

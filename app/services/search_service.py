@@ -14,9 +14,8 @@ from app.elasticsearch import search_items
 from app.elasticsearch.client import es
 from app.services.citation_service import CitationService
 from app.services.download_service import DownloadService
-from app.services.image_service import ImageService
 from app.services.relationship_service import RelationshipService
-from app.services.viewer_service import ViewerService, create_viewer_attributes
+from app.services.viewer_service import ViewerService
 from db.database import database
 
 logger = logging.getLogger(__name__)
@@ -81,7 +80,7 @@ class SearchService:
                     f"{((process_time / docs_processed) * 1000):.0f}ms"
                     if docs_processed > 0
                     else "0ms"
-                )
+                ),
             }
 
             total_time = time.time() - start_time
