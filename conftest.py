@@ -14,10 +14,22 @@ import atexit
 load_dotenv(".env.test", override=True)
 
 # Get test database URL from environment or use default
+# ALWAYS ensure we use a test database, never production
 DATABASE_URL = os.getenv(
-    "DATABASE_URL",
+    "TEST_DATABASE_URL",
     "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api_test"
 )
+
+# Safety check: If someone passes production DATABASE_URL, convert it to test
+if "DATABASE_URL" in os.environ and "btaa_ogm_api_test" not in os.environ.get("DATABASE_URL", ""):
+    production_url = os.environ["DATABASE_URL"]
+    # Convert production URL to test URL by replacing database name
+    if "btaa_ogm_api" in production_url and "btaa_ogm_api_test" not in production_url:
+        DATABASE_URL = production_url.replace("btaa_ogm_api", "btaa_ogm_api_test")
+        print(f"WARNING: Converted production DATABASE_URL to test database: {DATABASE_URL}")
+    else:
+        DATABASE_URL = "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api_test"
+        print(f"WARNING: Using default test database URL: {DATABASE_URL}")
 
 # Parse database URL
 parsed = urlparse(DATABASE_URL)
@@ -26,6 +38,13 @@ db_user = parsed.username
 db_password = parsed.password
 db_host = parsed.hostname
 db_port = parsed.port
+
+# Final safety check: NEVER allow production database in tests
+if db_name == "btaa_ogm_api":
+    raise ValueError(
+        f"CRITICAL ERROR: Tests attempted to use production database '{db_name}'! "
+        f"Tests must only use test databases. Current DATABASE_URL: {DATABASE_URL}"
+    )
 
 # Create test database engine
 engine = create_engine(DATABASE_URL)

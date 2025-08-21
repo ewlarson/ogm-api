@@ -1,20 +1,13 @@
-import json
 import logging
-from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPBasic
-from sqlalchemy import select
 
 from app.api.v1.auth import verify_credentials
-from app.api.v1.utils import create_response, sanitize_for_json
+from app.api.v1.utils import create_response
 from app.elasticsearch.index import reindex_items
 from app.services.cache_service import ENDPOINT_CACHE, CacheService, invalidate_cache_with_prefix
-from app.tasks.entities import generate_geo_entities
-from app.tasks.summarization import generate_item_summary
-from db.database import database
-from db.models import items
 
 logger = logging.getLogger(__name__)
 

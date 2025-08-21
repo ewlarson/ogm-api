@@ -4,13 +4,12 @@ import sys
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response
 
 from app.api.v1.endpoints import router as public_router
 from app.elasticsearch import close_elasticsearch, init_elasticsearch
@@ -42,23 +41,25 @@ security = HTTPBasic()
 
 class PermissiveSecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Middleware to set permissive security headers for data reuse and embedding."""
-    
+
     async def dispatch(self, request: StarletteRequest, call_next):
         response = await call_next(request)
-        
+
         # Set permissive Referrer Policy for data reuse
         response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
-        
+
         # Set permissive Content Security Policy for embedding
-        response.headers["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: *; frame-ancestors *;"
-        
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: *; frame-ancestors *;"
+        )
+
         # Allow embedding in frames
         response.headers["X-Frame-Options"] = "ALLOWALL"
-        
+
         # Remove any restrictive headers that might interfere with embedding
         if "X-Content-Type-Options" in response.headers:
             del response.headers["X-Content-Type-Options"]
-        
+
         return response
 
 
@@ -123,16 +124,19 @@ app.add_middleware(PermissiveSecurityHeadersMiddleware)
 # Include routers
 app.include_router(public_router, prefix="/api/v1")
 
+
 # Add redirect routes
 @app.get("/")
 async def redirect_root():
     """Redirect root path to API docs."""
     return RedirectResponse(url="/api/docs", status_code=302)
 
+
 @app.get("/api")
 async def redirect_api():
     """Redirect /api path to API docs."""
     return RedirectResponse(url="/api/docs", status_code=302)
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

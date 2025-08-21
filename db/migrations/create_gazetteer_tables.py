@@ -31,8 +31,11 @@ logger = logging.getLogger(__name__)
 def create_gazetteer_tables():
     """Create the gazetteer tables."""
     try:
+        # Convert async URL to sync URL for SQLAlchemy
+        sync_url = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        
         # Create engine and inspector
-        engine = create_engine(DATABASE_URL)
+        engine = create_engine(sync_url)
         inspector = inspect(engine)
 
         # Create MetaData instance

@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi.responses import JSONResponse
 
@@ -98,7 +98,83 @@ def add_ui_attributes(item: Dict) -> Dict:
     # Add citation
     item["ui_citation"] = citation_service.get_citation()
 
-    # Add download options
-    item["ui_downloads"] = download_service.get_download_options()
+    # Add download links
+    item["ui_download_links"] = download_service.get_download_links()
 
     return item
+
+
+async def process_resource(resource_dict: Dict, session) -> Dict:
+    """Process a resource dictionary to add UI attributes and format it for JSON:API."""
+    try:
+        # Add UI attributes
+        processed_resource = add_ui_attributes(resource_dict)
+
+        # Format as JSON:API resource object
+        resource_object = {
+            "type": "resource",
+            "id": processed_resource.get("id"),
+            "attributes": processed_resource,
+        }
+
+        return resource_object
+    except Exception as e:
+        logger.error(f"Error processing resource: {str(e)}")
+        # Return a minimal resource object if processing fails
+        return {"type": "resource", "id": resource_dict.get("id"), "attributes": resource_dict}
+
+
+def build_jsonapi_response(
+    data: List[Dict], links: Dict = None, meta: Dict = None, included: List = None
+) -> Dict:
+    """Build a JSON:API compliant response."""
+    response = {"data": data}
+
+    if links:
+        response["links"] = links
+
+    if meta:
+        response["meta"] = meta
+
+    if included:
+        response["included"] = included
+
+    return response
+
+
+def build_pagination_links(
+    base_url: str, current_page: int, total_pages: int, params: Dict = None
+) -> Dict:
+    """Build JSON:API pagination links."""
+    links = {}
+
+    # Build query string from params
+    query_parts = []
+    if params:
+        for key, value in params.items():
+            if value is not None:
+                query_parts.append(f"{key}={value}")
+
+    query_string = "&".join(query_parts)
+    separator = "&" if query_string else ""
+
+    # Self link (current page)
+    links["self"] = f"{base_url}?page={current_page}{separator}{query_string}"
+
+    # First page
+    if current_page > 1:
+        links["first"] = f"{base_url}?page=1{separator}{query_string}"
+
+    # Previous page
+    if current_page > 1:
+        links["prev"] = f"{base_url}?page={current_page - 1}{separator}{query_string}"
+
+    # Next page
+    if current_page < total_pages:
+        links["next"] = f"{base_url}?page={current_page + 1}{separator}{query_string}"
+
+    # Last page
+    if current_page < total_pages:
+        links["last"] = f"{base_url}?page={total_pages}{separator}{query_string}"
+
+    return links

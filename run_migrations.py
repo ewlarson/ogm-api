@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import inspect
 
 from db.config import DATABASE_URL
+from db.migrations.create_items_table import create_items_table
 from db.migrations.create_gazetteer_tables import create_gazetteer_tables
 from db.migrations.create_item_relationships import create_relationships_table
 from db.migrations.create_fast_embeddings import create_fast_embeddings_table
@@ -29,45 +30,49 @@ async def run_migrations():
     engine = create_async_engine(DATABASE_URL)
     
     try:
+        # Create items table
+        logger.info("Creating items table...")
+        create_items_table()
+        
         # Create gazetteer tables
         logger.info("Creating gazetteer tables...")
-        await create_gazetteer_tables(engine)
+        create_gazetteer_tables()
         
         # Create item relationships table
         logger.info("Creating item relationships table...")
-        await create_relationships_table(engine)
+        create_relationships_table()
         
         # Create FAST embeddings table
         logger.info("Creating FAST embeddings table...")
-        await create_fast_embeddings_table(engine)
+        create_fast_embeddings_table()
         
         # Create AI enrichments table
         logger.info("Creating AI enrichments table...")
-        await create_ai_enrichments_table(engine)
+        create_ai_enrichments_table()
         
         # Add enrichment type column
         logger.info("Adding enrichment type column...")
-        await add_enrichment_type_column(engine)
+        add_enrichment_type_column()
         
         # Add FAST gazetteer
         logger.info("Adding FAST gazetteer...")
-        await add_fast_gazetteer(engine)
+        add_fast_gazetteer()
         
         # Update FAST gazetteer
         logger.info("Updating FAST gazetteer...")
-        await update_fast_gazetteer(engine)
+        update_fast_gazetteer()
         
         # Rename AI enrichments table
         logger.info("Renaming AI enrichments table...")
-        await rename_ai_enrichments_table(engine)
+        rename_ai_enrichments_table()
         
         # Rename document_id to item_id in item_ai_enrichments table
         logger.info("Renaming document_id to item_id in item_ai_enrichments table...")
-        await rename_document_id_to_item_id(engine)
+        rename_document_id_to_item_id()
         
         # Create item_allmaps table
         logger.info("Creating item_allmaps table...")
-        await create_item_allmaps_table(engine)
+        await create_item_allmaps_table()
         
     except Exception as e:
         logger.error(f"Error running migrations: {str(e)}")

@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from fastapi import HTTPException
 from sqlalchemy.sql import text
 
-
 from db.database import database
 from db.models import items
 
@@ -322,7 +321,7 @@ async def process_search_response(response, limit, skip, search_criteria):
                         for hit in response["hits"]["hits"]
                         if hit["_source"]["id"] == item["id"]
                     ),
-                    "attributes": {**item}
+                    "attributes": {**item},
                 }
             )
 
