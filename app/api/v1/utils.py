@@ -105,21 +105,89 @@ def add_ui_attributes(item: Dict) -> Dict:
 
 
 async def process_resource(resource_dict: Dict, session) -> Dict:
-    """Process a resource dictionary to add UI attributes and format it for JSON:API."""
+    """Process a single resource and return the JSON:API formatted object."""
     try:
-        # Add UI attributes
-        processed_resource = add_ui_attributes(resource_dict)
+        # Add citation
+        from app.services.citation_service import CitationService
 
-        # Format as JSON:API resource object
+        citation_service = CitationService(resource_dict)
+        citation = citation_service.get_citation()
+
+        # Add download options
+        from app.services.download_service import DownloadService
+        download_service = DownloadService(resource_dict)
+        downloads = download_service.get_download_options()
+
+        # Add viewer attributes
+        from app.services.viewer_service import ViewerService
+        viewer_service = ViewerService(resource_dict)
+        viewer_attributes = viewer_service.get_viewer_attributes()
+
+        # Add thumbnail URL
+        from app.services.image_service import ImageService
+        image_service = ImageService(resource_dict)
+        thumbnail_url = image_service.get_thumbnail_url()
+
+        # Add relationships
+        from app.services.relationship_service import RelationshipService
+
+        relationship_service = RelationshipService()
+        relationships = await relationship_service.get_resource_relationships(resource_dict["id"])
+
+        # Add summaries
+        from sqlalchemy import text
+        summaries_query = text("""
+            SELECT * FROM item_ai_enrichments 
+            WHERE item_id = :resource_id 
+            ORDER BY created_at DESC
+        """)
+        summaries_result = await session.execute(summaries_query, {"resource_id": resource_dict["id"]})
+        summaries = summaries_result.fetchall()
+        summaries = [sanitize_for_json(dict(summary)) for summary in summaries]
+
+        # Add Allmaps data
+        logger.info(f"Processing resource data: {resource_dict}")
+        from app.services.allmaps_service import AllmapsService
+        allmaps_service = AllmapsService({"id": resource_dict["id"], "attributes": resource_dict})
+        allmaps_attributes = await allmaps_service.get_allmaps_attributes(session)
+        logger.info(f"Got Allmaps attributes: {allmaps_attributes}")
+
+        # Map database column names to official Aardvark field names
+        from app.api.v1.endpoint_modules.utils import clean_dict, map_to_aardvark_fields, format_file_size
+        aardvark_attributes = map_to_aardvark_fields(resource_dict)
+
+        # Build the resource object in JSON:API format
         resource_object = {
             "type": "resource",
-            "id": processed_resource.get("id"),
-            "attributes": processed_resource,
+            "id": str(resource_dict["id"]),
+            "attributes": clean_dict(aardvark_attributes),
+            "meta": clean_dict(
+                {
+                    "@context": "https://static.opengeometadata.org/contexts/aardvark-1.0.jsonld",
+                    "@type": "AardvarkRecord",
+                    "human_readable": {
+                        "file_size": format_file_size(resource_dict.get("gbl_filesize_s"))
+                    },
+                    "ui": {
+                        "allmaps": allmaps_attributes,
+                        "citation": citation,
+                        "downloads": downloads,
+                        "relationships": relationships,
+                        "summaries": summaries,
+                        "thumbnail_url": thumbnail_url,
+                        "viewer": {
+                            "protocol": viewer_attributes.get("protocol"),
+                            "endpoint": viewer_attributes.get("endpoint"),
+                            "geometry": viewer_attributes.get("geometry"),
+                        },
+                    },
+                }
+            ),
         }
 
         return resource_object
     except Exception as e:
-        logger.error(f"Error processing resource: {str(e)}")
+        logger.error(f"Error processing resource: {str(e)}", exc_info=True)
         # Return a minimal resource object if processing fails
         return {"type": "resource", "id": resource_dict.get("id"), "attributes": resource_dict}
 
