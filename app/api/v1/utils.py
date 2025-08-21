@@ -195,14 +195,20 @@ async def process_resource(resource_dict: Dict, session) -> Dict:
 def build_jsonapi_response(
     data: List[Dict], links: Dict = None, meta: Dict = None, included: List = None
 ) -> Dict:
-    """Build a JSON:API compliant response."""
-    response = {"data": data}
-
-    if links:
-        response["links"] = links
-
-    if meta:
-        response["meta"] = meta
+    """Build a complete JSON:API response."""
+    response = {
+        "jsonapi": {
+            "version": "1.1",
+            "profile": [
+                "https://opengeometadata.org/profile/aardvark",
+                "https://opengeometadata.org/profile/ui-hints",
+                "https://opengeometadata.org/profile/mcp/search",
+            ],
+        },
+        "links": links,
+        "meta": meta,
+        "data": data,
+    }
 
     if included:
         response["included"] = included
