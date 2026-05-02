@@ -1,23 +1,14 @@
 #!/usr/bin/env python3
-"""
-Example usage of the OpenGeoMetadata Harvester
-
-This script demonstrates how to use the Harvester class to:
-1. Clone OpenGeoMetadata repositories
-2. Pull updates from existing repositories
-3. Harvest documents for indexing
-4. Process the harvested documents
-"""
-
-import sys
 import os
 import logging
 from pathlib import Path
 
-# Add the scripts directory to the path so we can import the harvester
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+# Add the backend scripts directory to the path so we can import the harvester
+import sys
 
-from harvester import Harvester
+sys.path.insert(0, str(Path(__file__).parent.parent / "backend" / "scripts"))
+
+from ogm_harvester import OGMHarvester
 
 
 def setup_logging():
@@ -33,8 +24,8 @@ def example_basic_usage():
     print("=== Basic Harvester Usage ===")
     
     # Create a harvester instance
-    harvester = Harvester(
-        ogm_path="tmp/opengeometadata",
+    harvester = OGMHarvester(
+        ogm_path="backend/data/opengeometadata",
         schema_version="Aardvark"
     )
     
@@ -67,7 +58,7 @@ def example_pull_updates():
     """Example of pulling updates from existing repositories."""
     print("\n=== Pulling Updates ===")
     
-    harvester = Harvester(ogm_path="tmp/opengeometadata")
+    harvester = OGMHarvester(ogm_path="backend/data/opengeometadata")
     
     # Pull updates from all repositories
     updated = harvester.pull_all()
@@ -78,8 +69,8 @@ def example_custom_processing():
     """Example of custom processing of harvested documents."""
     print("\n=== Custom Document Processing ===")
     
-    harvester = Harvester(
-        ogm_path="tmp/opengeometadata",
+    harvester = OGMHarvester(
+        ogm_path="backend/data/opengeometadata",
         schema_version="Aardvark"
     )
     
@@ -112,7 +103,7 @@ def example_filter_by_institution():
     """Example of filtering documents by institution."""
     print("\n=== Filtering by Institution ===")
     
-    harvester = Harvester(ogm_path="tmp/opengeometadata")
+    harvester = OGMHarvester(ogm_path="backend/data/opengeometadata")
     
     # Filter for specific institutions
     target_institutions = ['stanford', 'mit', 'harvard']

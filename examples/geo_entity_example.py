@@ -11,8 +11,8 @@ import os
 import sys
 from pathlib import Path
 
-# Add the parent directory to the path so we can import the app modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add the backend directory to the path so we can import the backend app modules
+sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from app.services.gazetteer_service import GazetteerService
 from app.services.llm_service import LLMService

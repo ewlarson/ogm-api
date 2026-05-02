@@ -158,6 +158,7 @@ Get an HTML page with the embedded OGM viewer for a specific resource.
 The MCP service can be run as a standalone process:
 
 ```bash
+cd backend
 python -m app.services.mcp_service
 ```
 
@@ -172,10 +173,10 @@ To integrate with an MCP client, configure it to use the OGM API MCP service:
       "command": "python",
       "args": ["-m", "app.services.mcp_service"],
       "env": {
-        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost/btaa_ogm_api",
+        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost/opengeometadata_api",
         "ELASTICSEARCH_URL": "http://localhost:9200",
         "REDIS_HOST": "localhost",
-        "REDIS_PORT": "6379"
+        "REDIS_PORT": "6380"
       }
     }
   }
@@ -184,10 +185,11 @@ To integrate with an MCP client, configure it to use the OGM API MCP service:
 
 ### Testing
 
-A test script is provided to verify the MCP service functionality:
+A backend test suite is provided to verify the MCP service functionality:
 
 ```bash
-python test_mcp.py
+cd backend
+pytest tests/api/v1/test_mcp_endpoints.py tests/services/test_mcp_service.py
 ```
 
 ## Implementation Details

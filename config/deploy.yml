@@ -1,6 +1,6 @@
 # config/deploy.yml
-service: ogm-api
-image: ghcr.io/ewlarson/ogm-api
+service: opengeometadata-api
+image: ewlarson/opengeometadata-api
 
 builder:
   arch: amd64
@@ -29,19 +29,27 @@ registry:
 # ───────────────── ENV passed into *every* web container ────────────────
 env:
   clear:
-    ELASTICSEARCH_URL:     http://ogm-api-elasticsearch:9200
-    REDIS_URL:             redis://redis:6379/0
-    ELASTICSEARCH_INDEX:   btaa_ogm_api
+    ELASTICSEARCH_URL:     http://opengeometadata-api-elasticsearch:9200
+    ELASTICSEARCH_INDEX:   opengeometadata_api
+    REDIS_HOST:            opengeometadata-api-redis
+    REDIS_PORT:            "6379"
+    REDIS_DB:              "0"
     REDIS_TTL:             "604800"
     LOG_LEVEL:             DEBUG
     ENDPOINT_CACHE:        "true"
     GAZETTEER_CACHE_TTL:   "3600"
     APP_MODE:              production
     APPLICATION_URL:       https://ogm.geo4lib.app
+    OPENGEOMETADATA_API_BASE_URL: https://ogm.geo4lib.app
+    PYTHONPATH:            /app/backend
+    IS_DOCKER:             "true"
 
   secret:
     - DATABASE_URL
     - OPENAI_API_KEY
+    - REDIS_PASSWORD
+    - POSTGRES_PASSWORD
+    - OGM_WEBHOOK_SECRET
 
 # ────────────── Accessories (one per Compose service) ──────────────
 accessories:
@@ -57,15 +65,15 @@ accessories:
     # only listen on localhost
     port: "127.0.0.1:9200:9200"
     directories:
-      - esdata:/usr/share/elasticsearch/data
+      - /var/lib/opengeometadata-api/elasticsearch:/usr/share/elasticsearch/data
 
   postgres:
     image: postgres:15
     roles: [web]
     env:
       clear:
-        POSTGRES_USER: ogm_api_user
-        POSTGRES_DB:   btaa_ogm_api
+        POSTGRES_USER: postgres
+        POSTGRES_DB:   opengeometadata_api
       secret:
         - POSTGRES_PASSWORD
 
@@ -74,16 +82,11 @@ accessories:
     files:
       - config/init.sql:/docker-entrypoint-initdb.d/setup.sql
     directories:
-      - pgdata:/var/lib/postgresql/data
+      - /var/lib/opengeometadata-api/postgres:/var/lib/postgresql/data
 
   redis:
     image: redis:7.2
     roles: [web]
-    cmd: redis-server --appendonly yes
+    cmd: sh -lc 'redis-server --appendonly yes --protected-mode yes --bind 0.0.0.0 --requirepass "$REDIS_PASSWORD"'
     directories:
-      - redisdata:/data
-
-volumes:
-  - esdata
-  - pgdata
-  - redisdata
+      - /var/lib/opengeometadata-api/redis:/data
