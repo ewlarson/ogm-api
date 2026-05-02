@@ -7,8 +7,9 @@ This document describes the deployment process for the OGM API using [Kamal](htt
 The OGM API is deployed to production using Kamal, which orchestrates Docker containers across servers. The application consists of:
 
 - **Web Service**: FastAPI application (Python/uvicorn)
+- **Worker Service**: Celery worker for OGM harvests, cache jobs, and async processing
 - **Accessories** (supporting services):
-  - PostgreSQL database
+  - ParadeDB/PostgreSQL database
   - Elasticsearch search engine
   - Redis cache/message broker
 
@@ -44,11 +45,11 @@ The deployment configuration is defined in `config/deploy.yml`:
 ### Service Configuration
 
 ```yaml
-service: opengeometadata-api
+service: ogm-api
 image: ewlarson/opengeometadata-api
 ```
 
-The application is deployed as the `opengeometadata-api` service with images hosted on GitHub Container Registry.
+The application is deployed to the existing `ogm-api` Kamal service so it can reuse the current production hostnames and data accessories while serving the OpenGeoMetadata-branded backend.
 
 ### Server Configuration
 
@@ -57,9 +58,13 @@ servers:
   web:
     hosts:
       - ogm.geo4lib.app
+  worker:
+    hosts:
+      - ogm.geo4lib.app
+    cmd: bash -lc "cd /app/backend && exec celery -A app.tasks.worker worker -E --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --prefetch-multiplier=1"
 ```
 
-Deploys to a single production server at `ogm.geo4lib.app`.
+Deploys both the web app and the Celery worker to the same production server at `ogm.geo4lib.app`.
 
 ### Proxy & SSL
 
@@ -112,9 +117,13 @@ export OPENAI_MODEL="gpt-4"
 The `.kamal/secrets` file references these secrets:
 
 1. **KAMAL_REGISTRY_PASSWORD**: GitHub Container Registry authentication
-2. **DATABASE_URL**: PostgreSQL connection string (configured for Docker network)
-3. **OPENAI_API_KEY**: OpenAI API access
-4. **POSTGRES_PASSWORD**: PostgreSQL database password
+2. **DATABASE_URL**: PostgreSQL connection string for the Kamal accessory network
+3. **POSTGRES_PASSWORD**: PostgreSQL superuser password
+4. **REDIS_PASSWORD**: Redis authentication password
+5. **ADMIN_USERNAME** / **ADMIN_PASSWORD**: Basic auth credentials for admin endpoints
+6. **OGM_WEBHOOK_SECRET**: GitHub webhook signature secret for OGM repo events
+7. **GITHUB_TOKEN**: GitHub API token for nightly repo discovery and harvest orchestration
+8. **OPENAI_API_KEY** / **OPENAI_MODEL**: Optional AI feature configuration
 
 ## Environment Variables
 
@@ -126,18 +135,25 @@ These are passed to every web container:
 env:
   clear:
     ELASTICSEARCH_URL: http://ogm-api-elasticsearch:9200
-    REDIS_URL: redis://redis:6379/0
+    REDIS_HOST: ogm-api-redis
+    REDIS_PORT: "6379"
     ELASTICSEARCH_INDEX: opengeometadata_api
     REDIS_TTL: "604800"
     LOG_LEVEL: DEBUG
     ENDPOINT_CACHE: "true"
     GAZETTEER_CACHE_TTL: "3600"
+    ENABLE_FAST_EMBEDDINGS: "false"
     APP_MODE: production
+    APP_ENV: production
     APPLICATION_URL: https://ogm.geo4lib.app
   
   secret:
+    - ADMIN_USERNAME
+    - ADMIN_PASSWORD
     - DATABASE_URL
+    - GITHUB_TOKEN
     - OPENAI_API_KEY
+    - OPENAI_MODEL
 ```
 
 ## Accessories
@@ -167,11 +183,12 @@ postgres:
   image: postgres:15
   env:
     POSTGRES_USER: ogm_api_user
-    POSTGRES_DB: opengeometadata_api
+    POSTGRES_DB: btaa_ogm_api
 ```
 
-- PostgreSQL 15
-- Initialization SQL from `config/init.sql`
+- Existing PostgreSQL 15 accessory used by the current production deployment
+- Initialized via `config/init.sql`
+- FAST vector embeddings are disabled in Kamal by default because the current production database image does not expose the `vector` extension
 - Data persisted to `pgdata` volume
 
 ### Redis
@@ -382,7 +399,7 @@ SSH into the server and run:
 ssh ewlarson@ogm.geo4lib.app
 
 # Create backup
-docker exec ogm-api-postgres pg_dump -U ogm_api_user opengeometadata_api > backup_$(date +%Y%m%d).sql
+docker exec ogm-api-postgres pg_dump -U ogm_api_user btaa_ogm_api > backup_$(date +%Y%m%d).sql
 
 # Compress backup
 gzip backup_$(date +%Y%m%d).sql
@@ -401,7 +418,7 @@ ssh ewlarson@ogm.geo4lib.app
 gunzip backup.sql.gz
 
 # Restore
-cat backup.sql | docker exec -i ogm-api-postgres psql -U ogm_api_user opengeometadata_api
+cat backup.sql | docker exec -i ogm-api-postgres psql -U ogm_api_user btaa_ogm_api
 ```
 
 ## Elasticsearch Operations

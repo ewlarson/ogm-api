@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, inspect
 # Add the project root directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from db.models import metadata
+from db.models import ogm_harvest_runs, ogm_repos, ogm_resource_state
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -31,8 +31,17 @@ def create_ogm_harvest_tables():
         existing_tables = set(inspector.get_table_names())
         logger.info("Existing tables count: %s", len(existing_tables))
 
-        metadata.create_all(engine)
-        logger.info("✓ OGM harvest tables ensured via metadata.create_all()")
+        tables = [ogm_repos, ogm_harvest_runs, ogm_resource_state]
+        missing = [table.name for table in tables if table.name not in existing_tables]
+
+        if not missing:
+            logger.info("OGM harvest tables already exist")
+            return
+
+        for table in tables:
+            table.create(engine, checkfirst=True)
+
+        logger.info("✓ OGM harvest tables ensured: %s", ", ".join(missing))
     except Exception as e:
         logger.error("Error creating OGM harvest tables: %s", e)
         raise
@@ -40,4 +49,3 @@ def create_ogm_harvest_tables():
 
 if __name__ == "__main__":
     create_ogm_harvest_tables()
-

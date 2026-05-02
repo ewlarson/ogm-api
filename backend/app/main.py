@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 try:
     import appsignal
@@ -49,8 +50,29 @@ from db.database import database
 
 # Load environment variables from .env file
 load_dotenv()
-if appsignal is not None and os.getenv("APP_ENV") != "test":
-    appsignal.start()
+
+
+def _should_enable_appsignal() -> bool:
+    raw = os.getenv("ENABLE_APPSIGNAL", "false").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _appsignal_config_present() -> bool:
+    config_candidates = [
+        Path.cwd() / "__appsignal__.py",
+        Path(__file__).resolve().parents[1] / "__appsignal__.py",
+    ]
+    return any(path.exists() for path in config_candidates)
+
+
+if appsignal is not None and os.getenv("APP_ENV") != "test" and _should_enable_appsignal():
+    if _appsignal_config_present():
+        try:
+            appsignal.start()
+        except Exception as exc:
+            print(f"AppSignal disabled: startup failed ({exc})", file=sys.stderr)
+    else:
+        print("AppSignal disabled: no __appsignal__.py configuration file found", file=sys.stderr)
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
