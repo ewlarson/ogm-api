@@ -35,4 +35,4 @@ RUN mkdir -p logs static/maps
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["bash", "-lc", "cd /app/backend && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_UVICORN_WORKERS:-2} --log-level info"]

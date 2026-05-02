@@ -9,6 +9,7 @@ from db.migrations.create_ai_enrichments import create_ai_enrichments_table
 from db.migrations.create_fast_embeddings import create_fast_embeddings_table
 from db.migrations.create_gazetteer_tables import create_gazetteer_tables
 from db.migrations.create_item_allmaps_table import create_item_allmaps_table
+from db.migrations.create_ogm_harvest_tables import create_ogm_harvest_tables
 from db.migrations.create_resource_spatial_facets_table import create_resource_spatial_facets_table
 from db.migrations.create_resource_relationships import create_relationships_table
 from db.migrations.rename_ai_enrichments import rename_ai_enrichments_table
@@ -36,6 +37,10 @@ def run_migrations():
         # Create item relationships table
         logger.info("Creating item relationships table...")
         create_relationships_table()
+
+        # Create OGM harvest/admin tables
+        logger.info("Creating OGM harvest tables...")
+        create_ogm_harvest_tables()
 
         # Create FAST embeddings table
         logger.info("Creating FAST embeddings table...")

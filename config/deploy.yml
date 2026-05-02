@@ -1,5 +1,5 @@
 # config/deploy.yml
-service: opengeometadata-api
+service: ogm-api
 image: ewlarson/opengeometadata-api
 
 builder:
@@ -12,6 +12,11 @@ servers:
   web:
     hosts:
       - ogm.geo4lib.app
+    cmd: bash -lc "cd /app/backend && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers=${WEB_UVICORN_WORKERS:-2} --log-level info"
+  worker:
+    hosts:
+      - ogm.geo4lib.app
+    cmd: bash -lc "cd /app/backend && exec celery -A app.tasks.worker worker -E --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --prefetch-multiplier=1"
 
 proxy:
   ssl: true
@@ -29,24 +34,31 @@ registry:
 # ───────────────── ENV passed into *every* web container ────────────────
 env:
   clear:
-    ELASTICSEARCH_URL:     http://opengeometadata-api-elasticsearch:9200
+    ELASTICSEARCH_URL:     http://ogm-api-elasticsearch:9200
     ELASTICSEARCH_INDEX:   opengeometadata_api
-    REDIS_HOST:            opengeometadata-api-redis
+    REDIS_HOST:            ogm-api-redis
     REDIS_PORT:            "6379"
     REDIS_DB:              "0"
     REDIS_TTL:             "604800"
     LOG_LEVEL:             DEBUG
     ENDPOINT_CACHE:        "true"
     GAZETTEER_CACHE_TTL:   "3600"
+    ENABLE_FAST_EMBEDDINGS: "false"
+    ENABLE_APPSIGNAL:      "false"
     APP_MODE:              production
+    APP_ENV:               production
     APPLICATION_URL:       https://ogm.geo4lib.app
     OPENGEOMETADATA_API_BASE_URL: https://ogm.geo4lib.app
     PYTHONPATH:            /app/backend
     IS_DOCKER:             "true"
 
   secret:
+    - ADMIN_USERNAME
+    - ADMIN_PASSWORD
     - DATABASE_URL
+    - GITHUB_TOKEN
     - OPENAI_API_KEY
+    - OPENAI_MODEL
     - REDIS_PASSWORD
     - POSTGRES_PASSWORD
     - OGM_WEBHOOK_SECRET
@@ -72,8 +84,8 @@ accessories:
     roles: [web]
     env:
       clear:
-        POSTGRES_USER: postgres
-        POSTGRES_DB:   opengeometadata_api
+        POSTGRES_USER: ogm_api_user
+        POSTGRES_DB:   btaa_ogm_api
       secret:
         - POSTGRES_PASSWORD
 
