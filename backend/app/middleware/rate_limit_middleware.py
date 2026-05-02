@@ -32,6 +32,11 @@ IMMUTABLE_STATIC_MAP_PATH_RE = re.compile(
     r"^/api/v1/static-map-assets/[0-9a-f]{64}$",
     re.IGNORECASE,
 )
+HEALTHCHECK_BYPASS_PATHS = {
+    "/api/docs",
+    "/api/openapi.json",
+    "/api/redoc",
+}
 
 
 def _is_immutable_asset_route(path: str) -> bool:
@@ -39,6 +44,11 @@ def _is_immutable_asset_route(path: str) -> bool:
     return bool(
         IMMUTABLE_THUMBNAIL_PATH_RE.fullmatch(path) or IMMUTABLE_STATIC_MAP_PATH_RE.fullmatch(path)
     )
+
+
+def _is_healthcheck_route(path: str) -> bool:
+    """Return True for lightweight health/documentation routes used by deploy tooling."""
+    return path in HEALTHCHECK_BYPASS_PATHS
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -67,6 +77,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         skip_rate_limit_reason = None
         if not _rate_limit_enabled():
             skip_rate_limit_reason = "rate limiting disabled"
+        elif _is_healthcheck_route(request.url.path):
+            skip_rate_limit_reason = "healthcheck route"
         elif request.url.path.startswith("/api/v1/admin"):
             skip_rate_limit_reason = "admin endpoint"
         elif _is_immutable_asset_route(request.url.path):
@@ -158,6 +170,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 )
             for header_name, header_value in headers.items():
                 response.headers[header_name] = header_value
+
+        if skip_rate_limit_reason == "healthcheck route":
+            return response
 
         # Log API usage (fire-and-forget, won't block response).
         try:
