@@ -1,191 +1,73 @@
 # OpenGeoMetadata Harvester
 
-A Python implementation that mimics the Ruby GeoCombine::Harvester class for harvesting Geoblacklight documents from OpenGeoMetadata repositories for indexing.
+The standalone harvester now lives in `backend/scripts/ogm_harvester.py`. It mirrors the GeoCombine-style workflow for cloning OpenGeoMetadata repositories, pulling updates, and iterating over Aardvark records for indexing.
 
 ## Overview
 
-The Harvester class provides functionality to:
+`OGMHarvester` provides:
 
-- Clone OpenGeoMetadata repositories from GitHub
-- Pull updates from existing repositories
-- Harvest Geoblacklight JSON documents
-- Filter documents by schema version (e.g., "Aardvark")
-- Process documents for indexing
+- repository discovery from the OpenGeoMetadata GitHub organization
+- clone and pull support for metadata repositories
+- recursive Aardvark/GeoBlacklight JSON harvesting
+- schema-version filtering
+- a generator interface for downstream indexing work
 
-## Installation
+## CLI Usage
 
-The harvester is included in this repository and requires no additional dependencies beyond Python standard library modules.
-
-## Usage
-
-### Command Line Interface
-
-The harvester can be used directly from the command line:
+Run it from the backend directory:
 
 ```bash
-# List available repositories
-python scripts/harvester.py --action list
-
-# Clone all repositories
-python scripts/harvester.py --action clone
-
-# Pull updates from existing repositories
-python scripts/harvester.py --action pull
-
-# Harvest documents (clones/pulls first, then harvests)
-python scripts/harvester.py --action harvest
-
-# Use custom path and schema version
-python scripts/harvester.py --ogm-path /path/to/repos --schema-version Aardvark
-
-# Enable verbose logging
-python scripts/harvester.py --verbose
-```
-
-### Python API
-
-```python
-from scripts.harvester import Harvester
-
-# Create harvester instance
-harvester = Harvester(
-    ogm_path="tmp/opengeometadata",
-    schema_version="Aardvark"
-)
+cd backend
 
 # List repositories
-repos = harvester.repositories()
-print(f"Found {len(repos)} repositories")
+python scripts/ogm_harvester.py --action list
 
-# Clone all repositories
-cloned = harvester.clone_all()
-print(f"Cloned {len(cloned)} repositories")
+# Clone all harvestable repositories
+python scripts/ogm_harvester.py --action clone
 
-# Pull updates
-updated = harvester.pull_all()
-print(f"Updated {len(updated)} repositories")
+# Pull updates from existing clones
+python scripts/ogm_harvester.py --action pull
 
-# Harvest documents
-for record, path in harvester.docs_to_index():
-    record_id = record.get('layer_slug_s') or record.get('dc_identifier_s')
-    print(f"Found record: {record_id} at {path}")
+# Clone or pull, then stream harvestable records
+python scripts/ogm_harvester.py --action harvest
+
+# Override defaults
+python scripts/ogm_harvester.py --ogm-path data/opengeometadata --schema-version Aardvark
 ```
 
-## Configuration
-
-### Environment Variables
-
-- `OGM_PATH`: Path to store OpenGeoMetadata repositories (defaults to `tmp/opengeometadata`)
-- `SCHEMA_VERSION`: Schema version to filter for (defaults to "Aardvark")
-
-### Denylist
-
-The harvester automatically excludes certain repositories that are not metadata repositories:
-
-- GeoCombine
-- aardvark
-- metadata-issues
-- ogm_utils-python
-- opengeometadata.github.io
-- opengeometadata-rails
-- gbl-1_to_aardvark
-
-## Features
-
-### Repository Management
-
-- **Clone**: Clone repositories that don't exist locally
-- **Pull**: Update existing repositories with latest changes
-- **Filter**: Automatically filter out archived, empty, or denylisted repositories
-
-### Document Harvesting
-
-- **Recursive Search**: Finds all JSON files in repository directories
-- **Schema Filtering**: Filters documents by schema version (e.g., "Aardvark")
-- **File Filtering**: Skips `layers.json` files and non-JSON files
-- **Error Handling**: Gracefully handles malformed JSON and file access errors
-
-### Logging
-
-- Configurable logging levels (INFO, DEBUG)
-- Detailed progress reporting
-- Error logging with context
-
-## Examples
-
-See `examples/harvester_example.py` for comprehensive usage examples including:
-
-- Basic usage
-- Pulling updates
-- Custom document processing
-- Filtering by institution
-
-## Integration with Indexing
-
-The harvester is designed to work with indexing systems. You can use the `docs_to_index()` generator to feed documents to your indexer:
+## Python Usage
 
 ```python
-from scripts.harvester import Harvester
+import sys
+from pathlib import Path
 
-harvester = Harvester()
+sys.path.insert(0, str(Path.cwd() / "backend" / "scripts"))
+
+from ogm_harvester import OGMHarvester
+
+harvester = OGMHarvester(
+    ogm_path="backend/data/opengeometadata",
+    schema_version="Aardvark",
+)
+
 for record, path in harvester.docs_to_index():
-    # Process record for indexing
-    indexer.add_document(record)
+    record_id = record.get("id") or record.get("layer_slug_s")
+    print(record_id, path)
 ```
 
-## Error Handling
+## Defaults
 
-The harvester includes robust error handling:
+- default clone location: `data/opengeometadata` relative to the backend working directory
+- default schema version: `Aardvark`
 
-- Network errors when fetching repository lists
-- Git command failures
-- JSON parsing errors
-- File access errors
-- Repository-specific issues (archived, empty, etc.)
+The harvester denylist automatically excludes non-metadata repositories such as `GeoCombine`, `aardvark`, and other utility repos in the org.
 
-## Performance Considerations
+## Related Backend Flows
 
-- Uses shallow clones (`--depth 1`) to minimize download size
-- Processes documents as a generator to minimize memory usage
-- Includes progress logging for long-running operations
+For the full application workflow, these backend scripts usually matter more than the standalone harvester:
 
-## Comparison with Ruby Version
+- `scripts/populate_ogm_repos.py`
+- `scripts/trigger_ogm_nightly_sync.py`
+- `scripts/run_index.py`
 
-This Python implementation provides the same core functionality as the Ruby GeoCombine::Harvester:
-
-| Feature | Ruby Version | Python Version |
-|---------|-------------|----------------|
-| Repository cloning | ✅ | ✅ |
-| Repository pulling | ✅ | ✅ |
-| Document harvesting | ✅ | ✅ |
-| Schema filtering | ✅ | ✅ |
-| Denylist filtering | ✅ | ✅ |
-| Error handling | ✅ | ✅ |
-| Logging | ✅ | ✅ |
-| Command line interface | ❌ | ✅ |
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Git not found**: Ensure git is installed and in your PATH
-2. **Permission errors**: Check write permissions for the OGM path
-3. **Network errors**: Verify internet connectivity and GitHub API access
-4. **Memory issues**: For large repositories, consider processing in batches
-
-### Debug Mode
-
-Enable verbose logging to see detailed information:
-
-```bash
-python scripts/harvester.py --verbose --action harvest
-```
-
-## Contributing
-
-The harvester is designed to be extensible. Common extension points:
-
-- Custom document filters
-- Additional repository sources
-- Different output formats
-- Integration with specific indexing systems
+Those scripts populate the database tables used by the API and enqueue the nightly ingest pipeline, while `ogm_harvester.py` remains useful for direct inspection and lower-level debugging.

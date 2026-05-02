@@ -2,7 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -10,37 +9,30 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     zlib1g-dev \
     libpng-dev \
+    libcairo2-dev \
     gdal-bin \
     libgdal-dev \
     curl \
     ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Set GDAL version
 ENV GDAL_VERSION=3.4.1
 
-# Install UV
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    ls -l /root/.local/bin/uv && \
     /root/.local/bin/uv --version
 
-# Add uv to PATH
 ENV PATH="/root/.local/bin:$PATH"
+ENV UV_HTTP_TIMEOUT=300
 
-# Copy pyproject.toml and uv.lock first to leverage Docker cache
-COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
+COPY backend/scripts ./scripts
+COPY backend/ ./backend/
 
-# Copy the rest of the application
-COPY . .
+RUN uv pip install -e ./backend --system
 
-# Install Python dependencies
-RUN uv pip install -e . --system
+RUN mkdir -p logs static/maps
 
-# Create logs directory
-RUN mkdir -p logs
-
-# Expose port
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

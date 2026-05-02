@@ -1,5 +1,7 @@
 #!/bin/bash
-black .
-isort .
-flake8 .
-mypy . 
+set -euo pipefail
+
+cd backend
+ruff format app tests scripts
+ruff check --fix app tests scripts
+mypy --config-file mypy.ini

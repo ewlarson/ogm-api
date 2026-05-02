@@ -1,26 +1,41 @@
-.PHONY: lint lint-check format test lint-test
+.PHONY: lint format lint-check test test-fast test-no-coverage migrate reindex gazetteers ogm-nightly
 
-# Run both linting and formatting checks (without modifying files)
+BACKEND_DIR = backend
+
 lint:
-	@echo "Checking code with ruff..."
-	ruff check app/ tests/ scripts/
+	@echo "Checking backend-focused code with ruff..."
+	cd $(BACKEND_DIR) && ruff check app tests scripts
 
-# Format code in-place
 format:
-	@echo "Formatting code with ruff..."
-	ruff format app/ tests/ scripts/
-	ruff check --fix app/ tests/ scripts/
+	@echo "Formatting backend-focused code with ruff..."
+	cd $(BACKEND_DIR) && ruff format app tests scripts
+	cd $(BACKEND_DIR) && ruff check --fix app tests scripts
 
-# Check formatting only (for CI)
 lint-check:
-	@echo "Checking formatting with ruff..."
-	ruff format --check app/ tests/ scripts/
-	ruff check app/ tests/ scripts/
+	@echo "Checking formatting without modifying files..."
+	cd $(BACKEND_DIR) && ruff format --check app tests scripts
+	cd $(BACKEND_DIR) && ruff check app tests scripts
 
-# Run just the tests
 test:
-	@echo "Running tests..."
-	pytest --full-trace
+	@echo "Running backend test suite..."
+	cd $(BACKEND_DIR) && pytest --full-trace
 
-# Run linting and then tests (for CI)
-lint-test: lint-check test 
+test-fast:
+	@echo "Running backend test suite in parallel..."
+	cd $(BACKEND_DIR) && pytest -n 4
+
+test-no-coverage:
+	@echo "Running backend test suite without coverage requirements..."
+	cd $(BACKEND_DIR) && pytest --full-trace
+
+migrate:
+	cd $(BACKEND_DIR) && python scripts/run_migrations.py
+
+reindex:
+	cd $(BACKEND_DIR) && python scripts/run_index.py
+
+gazetteers:
+	cd $(BACKEND_DIR) && python scripts/run_gazetteers.py
+
+ogm-nightly:
+	cd $(BACKEND_DIR) && python scripts/trigger_ogm_nightly_sync.py

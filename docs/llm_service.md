@@ -1,6 +1,6 @@
 # LLM Service Documentation
 
-This document provides comprehensive documentation for the LLM (Large Language Model) service used in the data-api project. The service uses OpenAI's GPT models to provide AI-powered summarization, OCR, and geographic entity identification capabilities for historical maps and geographic datasets.
+This document provides comprehensive documentation for the LLM (Large Language Model) service used in the OpenGeoMetadata API backend. The service uses OpenAI models to provide AI-powered summarization, OCR, and geographic entity identification capabilities for historical maps and geographic datasets.
 
 ## Table of Contents
 - [Overview](#overview)
