@@ -326,10 +326,10 @@ kamal app logs --lines 100
 kamal app exec -i bash
 
 # Run a one-off command
-kamal app exec "cd /app/backend && python scripts/run_migrations.py"
+kamal app exec "python /app/backend/scripts/run_migrations.py"
 
 # Run database migrations
-kamal app exec "cd /app/backend && python scripts/run_migrations.py"
+kamal app exec "python /app/backend/scripts/run_migrations.py"
 ```
 
 ### Restart Application
@@ -387,7 +387,7 @@ After deploying new code that includes database migrations:
 
 ```bash
 # Execute migrations in the container
-kamal app exec "cd /app/backend && python scripts/run_migrations.py"
+kamal app exec "python /app/backend/scripts/run_migrations.py"
 ```
 
 ### Backup Database
@@ -427,7 +427,7 @@ cat backup.sql | docker exec -i ogm-api-postgres psql -U ogm_api_user btaa_ogm_a
 
 ```bash
 # Execute index rebuild in the container
-kamal app exec "cd /app/backend && python scripts/run_index.py"
+kamal app exec "python /app/backend/scripts/run_index.py"
 ```
 
 ### Check Index Health
@@ -479,7 +479,7 @@ kamal app logs --lines 200
 kamal app containers
 
 # Verify environment variables
-kamal app exec "env | grep -i elasticsearch"
+kamal app exec "sh -lc 'env | grep -i elasticsearch'"
 ```
 
 ### Common Issues
@@ -536,10 +536,10 @@ kamal app logs --follow
 curl https://ogm.geo4lib.app/api/docs
 
 # 6. If needed, run migrations
-kamal app exec "cd /app/backend && python scripts/run_migrations.py"
+kamal app exec "python /app/backend/scripts/run_migrations.py"
 
 # 7. If needed, rebuild search index
-kamal app exec "cd /app/backend && python scripts/run_index.py"
+kamal app exec "python /app/backend/scripts/run_index.py"
 ```
 
 ## CI/CD Integration
