@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 from db.migrations.add_enrichment_type import add_enrichment_type_column
 from db.migrations.add_fast_gazetteer import add_fast_gazetteer
 from db.migrations.api_rate_limiting import init_api_rate_limiting
+from db.migrations.backfill_resources_from_legacy_items import (
+    backfill_resources_from_legacy_items,
+)
 from db.migrations.create_ai_enrichments import create_ai_enrichments_table
 from db.migrations.create_fast_embeddings import create_fast_embeddings_table
 from db.migrations.create_gazetteer_tables import create_gazetteer_tables
@@ -53,6 +56,12 @@ def run_migrations():
         # Create spatial facets table used by search/indexing when available
         logger.info("Creating resource spatial facets table...")
         create_resource_spatial_facets_table()
+
+        # Backfill from legacy production `items` table when both schemas exist.
+        # This keeps the new backend usable on older deployments without
+        # mutating or dropping the original table during the cutover.
+        logger.info("Backfilling resources from legacy items table...")
+        backfill_resources_from_legacy_items()
 
         # Add enrichment type column
         logger.info("Adding enrichment type column...")
