@@ -59,7 +59,6 @@ env:
     - GITHUB_TOKEN
     - OPENAI_API_KEY
     - OPENAI_MODEL
-    - REDIS_PASSWORD
     - POSTGRES_PASSWORD
     - OGM_WEBHOOK_SECRET
 
@@ -99,6 +98,6 @@ accessories:
   redis:
     image: redis:7.2
     roles: [web]
-    cmd: sh -lc 'redis-server --appendonly yes --protected-mode yes --bind 0.0.0.0 --requirepass "$REDIS_PASSWORD"'
+    cmd: sh -lc 'redis-server --appendonly yes --protected-mode yes --bind 0.0.0.0'
     directories:
       - /var/lib/opengeometadata-api/redis:/data

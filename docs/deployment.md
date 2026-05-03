@@ -119,11 +119,10 @@ The `.kamal/secrets` file references these secrets:
 1. **KAMAL_REGISTRY_PASSWORD**: GitHub Container Registry authentication
 2. **DATABASE_URL**: PostgreSQL connection string for the Kamal accessory network
 3. **POSTGRES_PASSWORD**: PostgreSQL superuser password
-4. **REDIS_PASSWORD**: Redis authentication password
-5. **ADMIN_USERNAME** / **ADMIN_PASSWORD**: Basic auth credentials for admin endpoints
-6. **OGM_WEBHOOK_SECRET**: GitHub webhook signature secret for OGM repo events
-7. **GITHUB_TOKEN**: GitHub API token for nightly repo discovery and harvest orchestration
-8. **OPENAI_API_KEY** / **OPENAI_MODEL**: Optional AI feature configuration
+4. **ADMIN_USERNAME** / **ADMIN_PASSWORD**: Basic auth credentials for admin endpoints
+5. **OGM_WEBHOOK_SECRET**: GitHub webhook signature secret for OGM repo events
+6. **GITHUB_TOKEN**: GitHub API token for nightly repo discovery and harvest orchestration
+7. **OPENAI_API_KEY** / **OPENAI_MODEL**: Optional AI feature configuration
 
 ## Environment Variables
 
@@ -196,11 +195,13 @@ postgres:
 ```yaml
 redis:
   image: redis:7.2
-  cmd: redis-server --appendonly yes
+  cmd: redis-server --appendonly yes --protected-mode yes --bind 0.0.0.0
 ```
 
 - Redis 7.2
 - Append-only file (AOF) persistence enabled
+- Current production accessory runs without Redis AUTH; the app should omit
+  `REDIS_PASSWORD` unless/until the accessory is explicitly recreated with auth
 - Data persisted to `redisdata` volume
 
 ## Deployment Commands
