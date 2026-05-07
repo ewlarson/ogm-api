@@ -46,6 +46,7 @@ Once that finishes, open:
 
 - API docs at `http://localhost:8000/api/docs`
 - OpenAPI JSON at `http://localhost:8000/api/openapi.json`
+- OGM repository dashboard at `http://localhost:8000/api/v1/ogm/repos/dashboard`
 
 This starts:
 
@@ -98,11 +99,14 @@ For a first local bootstrap with real OGM data:
 
 ```bash
 docker compose exec api bash -lc "cd /app/backend && python scripts/populate_ogm_repos.py"
-docker compose exec api bash -lc "cd /app/backend && python - <<'PY'\nfrom app.tasks.ogm_harvest import ogm_harvest_all\nprint(ogm_harvest_all.delay(trigger='weekly').id)\nPY"
+docker compose exec api bash -lc "cd /app/backend && python - <<'PY'\nfrom app.tasks.ogm_harvest import ogm_harvest_all\nprint(ogm_harvest_all.delay(trigger='nightly').id)\nPY"
 docker compose exec api bash -lc "cd /app/backend && python scripts/run_index.py"
 ```
 
 The harvest populates Postgres first. Re-run `python scripts/run_index.py` from `backend/` after the harvest queue completes so Elasticsearch reflects the imported OGM records.
+
+Production also has a dedicated monitor page at `/api/v1/ogm/repos/dashboard` and a nightly
+GitHub Actions workflow for OGM repo discovery + harvest orchestration.
 
 See [docs/backend_upstream_sync.md](docs/backend_upstream_sync.md) for the upstream-sync and repo-watching strategy.
 
