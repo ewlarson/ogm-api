@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import String, cast, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from db.database import database
@@ -47,25 +47,28 @@ class OGMHarvestRepository:
             .where(ogm_resource_state.c.ogm_missing_since.is_(None))
             .scalar_subquery()
         )
+        empty_string = cast(literal(""), String())
+        published_state = cast(literal("published"), String())
+        ogm_repo_tag_prefix = cast(literal("ogm_repo:"), String())
         published_available_record_count = (
             select(func.count())
             .select_from(resources)
             .where(resources.c.b1g_adminTags_sm.is_not(None))
             .where(
                 resources.c.b1g_adminTags_sm.any(
-                    func.concat("ogm_repo:", ogm_repos.c.ogm_repo_name)
+                    func.concat(ogm_repo_tag_prefix, ogm_repos.c.ogm_repo_name)
                 )
             )
             .where(func.coalesce(resources.c.gbl_suppressed_b, False).is_(False))
             .where(
                 func.lower(
                     func.coalesce(
-                        func.nullif(resources.c.b1g_publication_state_s, ""),
-                        func.nullif(resources.c.publication_state, ""),
-                        "published",
+                        func.nullif(resources.c.b1g_publication_state_s, empty_string),
+                        func.nullif(resources.c.publication_state, empty_string),
+                        published_state,
                     )
                 )
-                == "published"
+                == published_state
             )
             .scalar_subquery()
         )
