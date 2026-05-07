@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 Nightly OpenGeoMetadata repo discovery + harvest enqueue.
 
 This script is intended for cron or another scheduler. It does two things:
 
 1. Refreshes the local `ogm_repos` watch list from the GitHub org.
-2. Enqueues `ogm_harvest_all(trigger="weekly")` so enabled repos are harvested.
+2. Enqueues `ogm_harvest_all(trigger="nightly")` so enabled repos are harvested.
 
 Run from the backend root, for example:
 
@@ -103,7 +104,7 @@ def main() -> None:
 
     harvest_task_id = None
     if not args.dry_run and not args.skip_harvest:
-        task = ogm_harvest_all.delay(trigger="weekly")
+        task = ogm_harvest_all.delay(trigger="nightly")
         harvest_task_id = task.id
 
     print(

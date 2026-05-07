@@ -124,6 +124,18 @@ The `.kamal/secrets` file references these secrets:
 6. **GITHUB_TOKEN**: GitHub API token for nightly repo discovery and harvest orchestration
 7. **OPENAI_API_KEY** / **OPENAI_MODEL**: Optional AI feature configuration
 
+### Nightly OGM Harvest Workflow Secrets
+
+The repo also includes `.github/workflows/ogm-nightly-sync.yml`, which SSHes to the
+production host nightly and runs the in-container OGM repo refresh + harvest trigger.
+
+Configure these GitHub Actions secrets for that workflow:
+
+1. **OGM_KAMAL_SSH_HOST**: production SSH hostname (for example `ogm.geo4lib.app`)
+2. **OGM_KAMAL_SSH_PORT**: optional SSH port, defaults to `22`
+3. **OGM_KAMAL_SSH_USER**: SSH username with Docker access on the host
+4. **OGM_KAMAL_SSH_PRIVATE_KEY**: private key matching that SSH user
+
 ## Environment Variables
 
 ### Application Environment
@@ -236,6 +248,17 @@ This will:
 3. Pull the image on the server
 4. Perform a rolling restart with zero downtime
 5. Run health checks
+
+### Manually Trigger the Nightly OGM Sync
+
+If you need to run the nightly OGM pipeline outside its normal schedule:
+
+```bash
+kamal app exec "python /app/backend/scripts/trigger_ogm_nightly_sync.py"
+```
+
+That command refreshes the discovered OpenGeoMetadata repository list and enqueues
+the scheduled OGM harvest tasks for enabled repos.
 
 ### Build Only
 

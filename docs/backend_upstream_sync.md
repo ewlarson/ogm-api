@@ -42,7 +42,7 @@ The imported backend already supports:
 This repo adds `backend/scripts/trigger_ogm_nightly_sync.py`, which:
 
 1. refreshes the `ogm_repos` table from the `OpenGeoMetadata` GitHub org
-2. enqueues `ogm_harvest_all(trigger="weekly")`
+2. enqueues `ogm_harvest_all(trigger="nightly")`
 
 Example nightly command:
 
@@ -55,6 +55,20 @@ python scripts/trigger_ogm_nightly_sync.py
 
 - Nightly: run `backend/scripts/trigger_ogm_nightly_sync.py`
 - Event-driven: configure a GitHub webhook that targets `/api/v1/admin/ogm/webhook`
+
+This repository now includes a GitHub Actions workflow at `.github/workflows/ogm-nightly-sync.yml`
+that SSHes to production nightly, finds the running `ogm-api` container, and runs:
+
+```bash
+python /app/backend/scripts/trigger_ogm_nightly_sync.py
+```
+
+Required GitHub Actions secrets:
+
+- `OGM_KAMAL_SSH_HOST`
+- `OGM_KAMAL_SSH_PORT` (optional, defaults to `22`)
+- `OGM_KAMAL_SSH_USER`
+- `OGM_KAMAL_SSH_PRIVATE_KEY`
 
 This gives us both:
 
