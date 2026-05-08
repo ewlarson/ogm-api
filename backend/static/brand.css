@@ -989,10 +989,55 @@ section#footer-app code {
   font-weight: 900;
 }
 
-.swagger-ui .highlight-code,
-.swagger-ui .microlight {
+.swagger-ui .highlight-code {
+  overflow: auto;
+  border: var(--docs-rule);
   border-radius: 0;
-  background: var(--docs-black) !important;
+  background: var(--docs-surface) !important;
+  color: var(--docs-black) !important;
+}
+
+.swagger-ui .microlight,
+.swagger-ui .highlight-code .microlight,
+.swagger-ui .highlight-code pre,
+.swagger-ui .highlight-code code {
+  display: block;
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  background: var(--docs-surface) !important;
+  color: var(--docs-black) !important;
+  font-family: var(--docs-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  text-shadow: none !important;
+  white-space: pre;
+}
+
+.swagger-ui .microlight *,
+.swagger-ui .highlight-code *,
+.swagger-ui .highlight-code span,
+.swagger-ui .highlight-code code,
+.swagger-ui .highlight-code pre {
+  background: transparent !important;
+  color: inherit !important;
+  text-shadow: none !important;
+}
+
+.swagger-ui .copy-to-clipboard,
+.swagger-ui .download-contents {
+  border: var(--docs-rule);
+  background: var(--docs-yellow);
+  color: var(--docs-black);
+  box-shadow: none;
+}
+
+.swagger-ui .copy-to-clipboard:hover,
+.swagger-ui .copy-to-clipboard:focus,
+.swagger-ui .download-contents:hover,
+.swagger-ui .download-contents:focus {
+  background: var(--docs-surface);
+  color: var(--docs-black);
 }
 
 .swagger-ui .model-box,
