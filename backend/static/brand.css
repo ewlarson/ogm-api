@@ -54,20 +54,14 @@ body.institutional {
   background:
     linear-gradient(to right, var(--docs-grid) 1px, transparent 1px),
     linear-gradient(to bottom, var(--docs-grid) 1px, transparent 1px),
-    radial-gradient(circle at 86% 18%, var(--docs-yellow-soft) 0 82px, transparent 84px),
-    linear-gradient(135deg, rgba(0, 87, 184, 0.1) 0 11%, transparent 11% 100%),
     var(--docs-paper);
   background-position:
     var(--docs-side-margin) 0,
     var(--docs-side-margin) 0,
-    0 0,
-    0 0,
     0 0;
   background-size:
     var(--docs-unit) var(--docs-unit),
     var(--docs-unit) var(--docs-unit),
-    auto,
-    auto,
     auto;
   font-family: var(--docs-font);
   line-height: 1.5;
@@ -77,23 +71,6 @@ body.institutional {
 body.institutional > * {
   position: relative;
   z-index: 1;
-}
-
-body.institutional::before {
-  position: fixed;
-  z-index: 0;
-  right: clamp(20px, 7vw, 96px);
-  bottom: clamp(28px, 8vw, 120px);
-  width: clamp(130px, 18vw, 260px);
-  aspect-ratio: 1;
-  content: "";
-  opacity: 0.78;
-  background:
-    linear-gradient(var(--docs-yellow), var(--docs-yellow)) 0 0 / 48% 48% no-repeat,
-    radial-gradient(circle at 78% 22%, var(--docs-red) 0 24%, transparent 25%),
-    linear-gradient(135deg, transparent 0 48%, var(--docs-blue) 49% 100%) 0 100% / 48% 48% no-repeat,
-    linear-gradient(var(--docs-black), var(--docs-black)) 100% 100% / 48% 48% no-repeat;
-  pointer-events: none;
 }
 
 body.institutional::after {
@@ -468,17 +445,7 @@ code {
 
 section#footer-app {
   color: var(--docs-surface);
-  background:
-    linear-gradient(to right, rgba(255, 253, 243, 0.1) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 253, 243, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 87, 184, 0.26) 0 18%, transparent 18% 100%),
-    var(--docs-black);
-  background-position: var(--docs-side-margin) 0;
-  background-size:
-    var(--docs-unit) var(--docs-unit),
-    var(--docs-unit) var(--docs-unit),
-    auto,
-    auto;
+  background: var(--docs-black);
   padding: calc(var(--docs-unit) * 2.2) 0 calc(var(--docs-unit) * 3);
 }
 
@@ -594,25 +561,8 @@ section#footer-app code {
   border-bottom: var(--docs-rule);
 }
 
-.swagger-ui .info::before {
-  grid-column: 1 / span 8;
-  grid-row: 1 / span 3;
-  display: block;
-  align-self: start;
-  width: calc(var(--docs-unit) * 5);
-  aspect-ratio: 1;
-  border: var(--docs-rule);
-  background:
-    linear-gradient(var(--docs-yellow), var(--docs-yellow)) 0 0 / 50% 50% no-repeat,
-    radial-gradient(circle at 75% 25%, var(--docs-red) 0 25%, transparent 26%),
-    linear-gradient(135deg, transparent 0 49%, var(--docs-blue) 50% 100%) 0 100% / 50% 50% no-repeat,
-    linear-gradient(var(--docs-black), var(--docs-black)) 100% 100% / 50% 50% no-repeat,
-    var(--docs-surface);
-  content: "";
-}
-
 .swagger-ui .info > * {
-  grid-column: 11 / span 46;
+  grid-column: 1 / span 56;
 }
 
 .swagger-ui .info .title {
@@ -1043,7 +993,7 @@ section#footer-app code {
 .monitor-hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) calc(var(--docs-unit) * 8);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--docs-unit);
   min-height: calc(var(--docs-unit) * 12);
   padding: calc(var(--docs-unit) * 1.4);
@@ -1052,23 +1002,6 @@ section#footer-app code {
   border-radius: var(--docs-radius);
   background: var(--docs-surface);
   box-shadow: 12px 12px 0 var(--docs-yellow);
-}
-
-.monitor-hero::after {
-  grid-column: 2;
-  grid-row: 1 / span 4;
-  align-self: start;
-  justify-self: end;
-  width: calc(var(--docs-unit) * 7);
-  aspect-ratio: 1;
-  border: var(--docs-rule);
-  background:
-    linear-gradient(var(--docs-yellow), var(--docs-yellow)) 0 0 / 50% 50% no-repeat,
-    radial-gradient(circle at 75% 25%, var(--docs-red) 0 25%, transparent 26%),
-    linear-gradient(135deg, transparent 0 49%, var(--docs-blue) 50% 100%) 0 100% / 50% 50% no-repeat,
-    linear-gradient(var(--docs-black), var(--docs-black)) 100% 100% / 50% 50% no-repeat,
-    var(--docs-surface);
-  content: "";
 }
 
 .monitor-hero > * {
@@ -1314,7 +1247,6 @@ section#footer-app code {
     --docs-side-margin: var(--docs-unit);
   }
 
-  body.institutional::before,
   body.institutional::after {
     display: none;
   }
@@ -1422,18 +1354,12 @@ section#footer-app code {
     padding-top: var(--docs-unit);
   }
 
-  .swagger-ui .info::before {
-    grid-column: 1 / span 4;
-    grid-row: 1;
-    width: calc(var(--docs-unit) * 3.5);
-  }
-
   .swagger-ui .info > * {
     grid-column: 1 / -1;
   }
 
   .swagger-ui .info .title {
-    margin-top: calc(var(--docs-unit) * 4);
+    margin-top: 0;
     font-size: 36px;
     line-height: 1;
   }
@@ -1475,19 +1401,12 @@ section#footer-app code {
     box-shadow: 7px 7px 0 var(--docs-yellow);
   }
 
-  .monitor-hero::after {
-    grid-column: 1;
-    grid-row: 1;
-    justify-self: start;
-    width: calc(var(--docs-unit) * 3.5);
-  }
-
   .monitor-hero > * {
     grid-column: 1;
   }
 
   .monitor-hero .eyebrow {
-    margin-top: calc(var(--docs-unit) * 4);
+    margin-top: 0;
   }
 
   .monitor-hero h2 {
