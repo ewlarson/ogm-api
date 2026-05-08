@@ -253,6 +253,11 @@ app.include_router(public_router, prefix="/api/v1")
 app.include_router(ogc_router, prefix="/api/v1/ogc")
 
 
+@app.get("/", include_in_schema=False)
+async def root_docs_redirect():
+    return RedirectResponse(url="/api/docs", status_code=308)
+
+
 @app.get("/api/v1", include_in_schema=False)
 async def api_v1_no_slash_redirect():
     # Ensure /api/v1 (no trailing slash) works by redirecting to the canonical /api/v1/
