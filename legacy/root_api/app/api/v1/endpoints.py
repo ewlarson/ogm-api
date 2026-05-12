@@ -1,0 +1,21 @@
+from fastapi import APIRouter
+
+from .endpoint_modules.mcp import router as mcp_router
+from .endpoint_modules.resources import router as resources_router
+
+# Import all endpoint modules
+from .endpoint_modules.root import router as root_router
+from .endpoint_modules.search import router as search_router
+from .endpoint_modules.thumbnails import router as thumbnails_router
+from .endpoint_modules.validate import router as validate_router
+
+# Create the main router
+router = APIRouter()
+
+# Include all endpoint routers
+router.include_router(root_router, tags=["root"])
+router.include_router(resources_router, tags=["resources"])
+router.include_router(search_router, tags=["search"])
+router.include_router(thumbnails_router, tags=["thumbnails"])
+router.include_router(mcp_router, tags=["mcp"])
+router.include_router(validate_router, tags=["validation"])

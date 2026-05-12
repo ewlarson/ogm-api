@@ -1,0 +1,103 @@
+# config/deploy.yml
+service: ogm-api
+image: ewlarson/opengeometadata-api
+
+builder:
+  arch: amd64
+
+ssh:
+  user: ewlarson
+
+servers:
+  web:
+    hosts:
+      - ogm.geo4lib.app
+    cmd: bash -lc "cd /app/backend && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers=${WEB_UVICORN_WORKERS:-2} --log-level info"
+  worker:
+    hosts:
+      - ogm.geo4lib.app
+    cmd: bash -lc "cd /app/backend && exec celery -A app.tasks.worker worker -E --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --prefetch-multiplier=1"
+
+proxy:
+  ssl: true
+  host: ogm.geo4lib.app
+  app_port: 8000
+  healthcheck:
+    path: /api/docs
+
+registry:
+  server: ghcr.io
+  username: ewlarson
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+# ───────────────── ENV passed into *every* web container ────────────────
+env:
+  clear:
+    ELASTICSEARCH_URL:     http://ogm-api-elasticsearch:9200
+    ELASTICSEARCH_INDEX:   opengeometadata_api
+    REDIS_HOST:            ogm-api-redis
+    REDIS_PORT:            "6379"
+    REDIS_DB:              "0"
+    REDIS_TTL:             "604800"
+    LOG_LEVEL:             DEBUG
+    ENDPOINT_CACHE:        "true"
+    GAZETTEER_CACHE_TTL:   "3600"
+    ENABLE_FAST_EMBEDDINGS: "false"
+    ENABLE_APPSIGNAL:      "false"
+    APP_MODE:              production
+    APP_ENV:               production
+    APPLICATION_URL:       https://ogm.geo4lib.app
+    OPENGEOMETADATA_API_BASE_URL: https://ogm.geo4lib.app
+    PYTHONPATH:            /app/backend
+    IS_DOCKER:             "true"
+
+  secret:
+    - ADMIN_USERNAME
+    - ADMIN_PASSWORD
+    - DATABASE_URL
+    - GITHUB_TOKEN
+    - OPENAI_API_KEY
+    - OPENAI_MODEL
+    - POSTGRES_PASSWORD
+    - OGM_WEBHOOK_SECRET
+
+# ────────────── Accessories (one per Compose service) ──────────────
+accessories:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
+    roles: [web]
+    env:
+      clear:
+        discovery.type: single-node
+        xpack.security.enabled: "false"
+        ES_JAVA_OPTS: "-Xms2g -Xmx2g"
+        cluster.routing.allocation.disk.threshold_enabled: "true"
+    # only listen on localhost
+    port: "127.0.0.1:9200:9200"
+    directories:
+      - /var/lib/opengeometadata-api/elasticsearch:/usr/share/elasticsearch/data
+
+  postgres:
+    image: postgres:15
+    roles: [web]
+    env:
+      clear:
+        POSTGRES_USER: ogm_api_user
+        POSTGRES_DB:   btaa_ogm_api
+      secret:
+        - POSTGRES_PASSWORD
+
+    # only listen on localhost
+    port: "127.0.0.1:5432:5432"
+    files:
+      - config/init.sql:/docker-entrypoint-initdb.d/setup.sql
+    directories:
+      - /var/lib/opengeometadata-api/postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7.2
+    roles: [web]
+    cmd: sh -lc 'redis-server --appendonly yes --protected-mode yes --bind 0.0.0.0'
+    directories:
+      - /var/lib/opengeometadata-api/redis:/data

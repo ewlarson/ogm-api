@@ -1,156 +1,66 @@
 # Scripts Documentation
 
-This document provides an overview of the utility scripts available in the project.
+The application code lives in `backend/`, and the operational scripts live in `backend/scripts/`.
 
-## Overview
+The repo-root `scripts/` directory is intentionally minimal now. It only contains project-scaffolding helpers such as `sync_backend_from_data_api.sh`, which refreshes the mirrored backend from the upstream BTAA `data-api` checkout.
 
-The `scripts/` directory contains various utility scripts for managing the application's data, testing functionality, and performing maintenance tasks.
+## Where To Run Scripts
 
-## Available Scripts
+From the repo root:
 
-### 1. `process_allmaps.py`
-
-**Purpose**: Processes and generates Allmaps annotations for items in the database.
-
-**Key Features**:
-- Processes individual items or all items in the database
-- Generates Allmaps IDs and annotations
-- Updates item records with Allmaps attributes
-- Supports reprocessing of existing items
-- Implements logging and error handling
-
-**Usage**:
 ```bash
-# Process a specific item
-python process_allmaps.py --item-id "9139578d-7803-4f4f-9ed3-a62ab810a256"
-
-# Process all items
-python process_allmaps.py --all
+cd backend
+python scripts/run_migrations.py
+python scripts/run_index.py
+python scripts/trigger_ogm_nightly_sync.py --dry-run
 ```
 
-**Requirements**:
-- Database connection must be properly configured
-- Item must have a valid manifest URL
-- Item must not already have Allmaps attributes (unless reprocessing)
+If you prefer Docker:
 
-**Output**:
-- Updates the `item_allmaps` table with generated Allmaps data
-- Logs processing status and any errors encountered
-
-### 2. `populate_relationships.py`
-
-**Purpose**: Manages and populates relationship data between documents in the database.
-
-**Key Features**:
-- Processes various types of document relationships (isPartOf, hasMember, isVersionOf, etc.)
-- Maintains bidirectional relationships
-- Clears existing relationships before populating new ones
-- Implements logging to both console and file
-
-**Usage**:
 ```bash
-python scripts/populate_relationships.py
+docker compose exec api bash -lc "cd /app/backend && python scripts/run_migrations.py"
+docker compose exec api bash -lc "cd /app/backend && python scripts/run_index.py"
+docker compose exec api bash -lc "cd /app/backend && python scripts/trigger_ogm_nightly_sync.py --dry-run"
 ```
 
-### 3. `generate_fast_embeddings.py`
+## Core Backend Scripts
 
-**Purpose**: Generates and stores embeddings for FAST gazetteer data using OpenAI's API.
+### `scripts/run_migrations.py`
 
-**Key Features**:
-- Uses OpenAI's text-embedding-3-small model
-- Processes records in batches
-- Stores embeddings in the database
-- Implements error handling and logging
+Runs the standard OpenGeoMetadata database migrations for the mirrored backend.
 
-**Requirements**:
-- OpenAI API key must be set in environment variables
+### `scripts/run_index.py`
 
-**Usage**:
-```bash
-python scripts/generate_fast_embeddings.py
-```
+Builds or refreshes the Elasticsearch index from Postgres-backed resource data.
 
-### 4. `run_migration.py`
+### `scripts/run_gazetteers.py`
 
-**Purpose**: Executes database migrations.
+Loads gazetteer support data. This is optional for many OGM-focused workflows.
 
-**Key Features**:
-- Supports multiple migration types
-- Implements command-line argument parsing
-- Provides logging of migration progress
+### `scripts/populate_ogm_repos.py`
 
-**Available Migrations**:
-- `add_fast_gazetteer`: Adds FAST gazetteer data to the database
+Discovers OpenGeoMetadata repositories and updates the local `ogm_repos` table.
 
-**Usage**:
-```bash
-python scripts/run_migration.py add_fast_gazetteer
-```
+### `scripts/trigger_ogm_nightly_sync.py`
 
-### 5. `import_fast.py`
+Refreshes repo discovery and enqueues the nightly OGM harvest workflow.
 
-**Purpose**: Imports OCLC FAST Dataset Geographic entries into the database.
+### `scripts/ogm_harvester.py`
 
-**Key Features**:
-- Asynchronous data import
-- Progress tracking and reporting
-- Error handling and logging
-- Performance metrics (records processed, elapsed time)
+Provides the standalone OGM repository harvesting utility used for cloning, pulling, and iterating over Aardvark records.
 
-**Usage**:
-```bash
-python scripts/import_fast.py
-```
+### `scripts/run_migration.py`
 
-### 6. `clear_cache.py`
+Runs one targeted migration by name when you need a single fix or backfill rather than the full migration bundle.
 
-**Purpose**: Clears the Redis cache used by the application.
+### `scripts/clear_cache.py`
 
-**Key Features**:
-- Clears all Redis databases
-- Reports memory usage after clearing
-- Configurable Redis connection parameters
-- Error handling and logging
+Clears Redis-backed API caches using the configured `REDIS_HOST` and `REDIS_PORT`.
 
-**Usage**:
-```bash
-python scripts/clear_cache.py
-```
+## Upstream Sync Helper
 
-### 7. `test_gazetteer_api.py`
+At the repo root, this script remains useful:
 
-**Purpose**: Tests the functionality of gazetteer API endpoints.
+### `scripts/sync_backend_from_data_api.sh`
 
-**Key Features**:
-- Tests multiple gazetteer sources (GeoNames, Who's on First, BTAA)
-- Provides detailed output of test results
-- Configurable base URL for testing different environments
-- Pretty-prints JSON responses
-
-**Usage**:
-```bash
-python scripts/test_gazetteer_api.py [--base-url URL]
-```
-
-## Common Features
-
-All scripts share some common features:
-- Logging configuration
-- Error handling
-- Environment variable support
-- Python path configuration for module imports
-
-## Environment Variables
-
-Several scripts require specific environment variables:
-
-- `OPENAI_API_KEY`: Required by `generate_fast_embeddings.py`
-- `REDIS_HOST` and `REDIS_PORT`: Used by `clear_cache.py`
-- `LOG_PATH`: Optional path for log files
-
-## Logging
-
-All scripts implement logging with the following characteristics:
-- Log level: INFO by default
-- Format: Timestamp, logger name, level, and message
-- Output: Console and/or file depending on the script 
+Copies `backend/` forward from a local BTAA `data-api` checkout while excluding local runtime data and other generated artifacts.

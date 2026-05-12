@@ -62,7 +62,7 @@ You can run the test suite using:
 make test
 ```
 
-This executes pytest with the configuration in `pytest.ini`, which includes automatic coverage reporting.
+This runs the backend test suite from `backend/` using the backend pytest configuration.
 
 ## Running Individual Tests
 
@@ -70,24 +70,24 @@ You can run specific test files or even individual test functions using `pytest`
 
 *   **Run a specific test file:**
     ```bash
-    pytest tests/api/test_example.py
+    cd backend && pytest tests/api/v1/test_search_endpoints.py
     ```
 
 *   **Run tests in a specific directory:**
     ```bash
-    pytest tests/services/
+    cd backend && pytest tests/services/
     ```
 
 *   **Run a specific test function using the `-k` flag (keyword expression):**
     ```bash
-    pytest -k test_example
+    cd backend && pytest -k test_example
     ```
 
 *   **Run tests matching a specific marker (if you define markers later):**
     ```bash
-    pytest -m <marker_name>
+    cd backend && pytest -m <marker_name>
     ```
 
 ## Test Coverage
 
-Coverage is automatically calculated when running `pytest` (as configured in `pytest.ini`). The report showing missing lines will be printed to the terminal. 
+Coverage can be enabled from the backend test configuration when running `pytest` inside `backend/`.
