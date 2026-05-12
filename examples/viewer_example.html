@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OGM Viewer Integration Examples</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .example {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .example h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .code {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .viewer-container {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .config-display {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>OGM Viewer Integration Examples</h1>
+    <p>This page demonstrates different ways to integrate the OGM viewer with your API.</p>
+
+    <!-- Example 1: Direct iframe embedding -->
+    <div class="example">
+        <h3>1. Direct iframe Embedding</h3>
+        <p>Embed the viewer directly using an iframe:</p>
+        <div class="code">
+&lt;iframe 
+    src="http://localhost:8000/api/v1/resources/YOUR_RESOURCE_ID/viewer?embed=true" 
+    width="100%" 
+    height="600px" 
+    frameborder="0"&gt;
+&lt;/iframe&gt;
+        </div>
+        
+        <div class="viewer-container">
+            <iframe 
+                src="http://localhost:8000/api/v1/resources/example-id/viewer?embed=true" 
+                width="100%" 
+                height="400px" 
+                frameborder="0"
+                title="OGM Viewer Example">
+            </iframe>
+        </div>
+    </div>
+
+    <!-- Example 2: Web Component Usage -->
+    <div class="example">
+        <h3>2. Web Component Usage</h3>
+        <p>Use the OGM viewer as a web component in your HTML:</p>
+        <div class="code">
+&lt;script type="module" src="https://unpkg.com/ogm-viewer"&gt;&lt;/script&gt;
+&lt;ogm-viewer record-url="http://localhost:8000/api/v1/resources/YOUR_RESOURCE_ID/ogm"&gt;&lt;/ogm-viewer&gt;
+        </div>
+        
+        <div class="viewer-container">
+            <script type="module" src="https://unpkg.com/ogm-viewer"></script>
+            <ogm-viewer record-url="http://localhost:8000/api/v1/resources/example-id/ogm"></ogm-viewer>
+        </div>
+    </div>
+
+    <!-- Example 3: Dynamic Configuration -->
+    <div class="example">
+        <h3>3. Dynamic Configuration</h3>
+        <p>Get viewer configuration programmatically:</p>
+        <div class="code">
+fetch('/api/v1/resources/YOUR_RESOURCE_ID/viewer/config')
+    .then(response => response.json())
+    .then(config => {
+        console.log('Viewer config:', config);
+        // Use config.embed_html, config.web_component_usage, etc.
+    });
+        </div>
+        
+        <button class="button" onclick="loadConfig()">Load Viewer Config</button>
+        <div id="config-display" class="config-display"></div>
+    </div>
+
+    <!-- Example 4: Theme Customization -->
+    <div class="example">
+        <h3>4. Theme Customization</h3>
+        <p>Customize the viewer theme (light, dark, or auto):</p>
+        <div class="code">
+&lt;iframe 
+    src="http://localhost:8000/api/v1/resources/YOUR_RESOURCE_ID/viewer?theme=dark&amp;embed=true" 
+    width="100%" 
+    height="600px" 
+    frameborder="0"&gt;
+&lt;/iframe&gt;
+        </div>
+        
+        <button class="button" onclick="changeTheme('light')">Light Theme</button>
+        <button class="button" onclick="changeTheme('dark')">Dark Theme</button>
+        <button class="button" onclick="changeTheme('auto')">Auto Theme</button>
+        
+        <div class="viewer-container">
+            <iframe 
+                id="theme-viewer"
+                src="http://localhost:8000/api/v1/resources/example-id/viewer?theme=auto&embed=true" 
+                width="100%" 
+                height="400px" 
+                frameborder="0"
+                title="OGM Viewer with Theme">
+            </iframe>
+        </div>
+    </div>
+
+    <!-- Example 5: Custom Embed Snippet -->
+    <div class="example">
+        <h3>5. Custom Embed Snippet</h3>
+        <p>Get a custom embed snippet with specific dimensions:</p>
+        <div class="code">
+fetch('/api/v1/resources/YOUR_RESOURCE_ID/viewer/embed?height=800px&width=90%')
+    .then(response => response.text())
+    .then(html => {
+        document.getElementById('embed-container').innerHTML = html;
+    });
+        </div>
+        
+        <button class="button" onclick="loadCustomEmbed()">Load Custom Embed</button>
+        <div id="embed-container"></div>
+    </div>
+
+    <script>
+        // Example 3: Load configuration
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/v1/resources/example-id/viewer/config');
+                const config = await response.json();
+                document.getElementById('config-display').textContent = JSON.stringify(config, null, 2);
+            } catch (error) {
+                console.error('Error loading config:', error);
+                document.getElementById('config-display').textContent = 'Error loading configuration';
+            }
+        }
+
+        // Example 4: Change theme
+        function changeTheme(theme) {
+            const iframe = document.getElementById('theme-viewer');
+            iframe.src = `http://localhost:8000/api/v1/resources/example-id/viewer?theme=${theme}&embed=true`;
+        }
+
+        // Example 5: Load custom embed
+        async function loadCustomEmbed() {
+            try {
+                const response = await fetch('/api/v1/resources/example-id/viewer/embed?height=500px&width=80%');
+                const html = await response.text();
+                document.getElementById('embed-container').innerHTML = html;
+            } catch (error) {
+                console.error('Error loading embed:', error);
+                document.getElementById('embed-container').innerHTML = 'Error loading embed snippet';
+            }
+        }
+    </script>
+</body>
+</html>

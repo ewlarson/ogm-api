@@ -1,20 +1,20 @@
 services:
   paradedb_test:
-    image: paradedb/paradedb:latest
-    container_name: btaa-ogm-api-paradedb-test
+    image: paradedb/paradedb:0.18.11
+    container_name: opengeometadata-api-paradedb-test
     env_file:
       - .env.test
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=btaa_ogm_api_test
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=opengeometadata_api_test
     ports:
-      - "2346:5432"  # Different port from dev database
+      - "2346:5432"
     volumes:
-      - ./data/postgres_test:/var/lib/postgresql/data
+      - ./backend/data/postgres_test:/var/lib/postgresql/data
     networks:
       - test_network
 
 networks:
   test_network:
-    driver: bridge 
+    driver: bridge

@@ -40,16 +40,16 @@ data/
 
 ### Using the Download Script
 
-The `download.py` script in the `app/gazetteer` directory provides a unified interface for downloading data from all supported gazetteers.
+The gazetteer download tooling lives in the backend codebase.
 
 To download data from all gazetteers:
 ```bash
-python app/gazetteer/download.py --all-gazetteers
+cd backend && python app/gazetteer/download.py --all-gazetteers
 ```
 
 To download data from a specific gazetteer:
 ```bash
-python app/gazetteer/download.py --gazetteers [gazetteer_name]
+cd backend && python app/gazetteer/download.py --gazetteers [gazetteer_name]
 ```
 
 Where `[gazetteer_name]` can be:
@@ -86,15 +86,17 @@ Where `[gazetteer_name]` can be:
 
 ### Using the Import Script
 
-The `import_all.py` script in the `app/gazetteer` directory handles importing data from all supported gazetteers.
+The import workflow now runs from `backend/`. The lower-level `app/gazetteer/import_all.py` module is still available there when you need fine-grained control.
 
 To import data from all gazetteers:
 ```bash
-python app/gazetteer/import_all.py --all-gazetteers
+cd backend
+python scripts/run_gazetteers.py
 ```
 
 To import data from a specific gazetteer:
 ```bash
+cd backend
 python app/gazetteer/import_all.py --gazetteers [gazetteer_name]
 ```
 

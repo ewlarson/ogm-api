@@ -3,26 +3,35 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ewlarson/btaa-ogm-api:0.1.1
-    container_name: btaa-ogm-api-app
+    image: ewlarson/opengeometadata-api:0.6.0
+    container_name: opengeometadata-api-app
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@paradedb:5432/btaa_ogm_api
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@paradedb:5432/opengeometadata_api
+      - DB_POOL_MIN=${DB_POOL_MIN:-1}
+      - DB_POOL_MAX=${DB_POOL_MAX:-10}
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - ELASTICSEARCH_INDEX=btaa_ogm_api
+      - ELASTICSEARCH_INDEX=opengeometadata_api
       - LOG_PATH=/app/logs
       - APPLICATION_URL=http://localhost:8000
-      - CORS_ORIGINS=http://localhost:5173,https://ewlarson.github.io,https://btaa-ogm-api.ngrok.io
+      - OPENGEOMETADATA_API_BASE_URL=http://localhost:8000
+      - CORS_ORIGINS=*
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_TTL=604800  # 7 days in seconds
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - REDIS_TTL=604800
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
       - LOG_LEVEL=DEBUG
-      - ENDPOINT_CACHE=true  # Enable endpoint caching
-      - GAZETTEER_CACHE_TTL=3600  # 1 hour in seconds
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=changeme
+      - ENDPOINT_CACHE=${ENDPOINT_CACHE:-true}
+      - CACHE_DEBUG_HEADERS=${CACHE_DEBUG_HEADERS:-false}
+      - GAZETTEER_CACHE_TTL=3600
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - OGM_WEBHOOK_SECRET=${OGM_WEBHOOK_SECRET:-changeme}
       - IS_DOCKER=true
+      - PYTHONPATH=/app/backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -35,23 +44,24 @@ services:
       - .:/app
     networks:
       - elastic
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
+    command: ["bash", "-lc", "cd /app/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug"]
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
-    container_name: btaa-ogm-api-elasticsearch
+    container_name: opengeometadata-api-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
-      - cluster.routing.allocation.disk.threshold_enabled=true
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      - cluster.routing.allocation.disk.threshold_enabled=${ELASTICSEARCH_DISK_THRESHOLD_ENABLED:-false}
       - cluster.routing.allocation.disk.watermark.low=85%
-      - cluster.routing.allocation.disk.watermark.high=90%
-      - cluster.routing.allocation.disk.watermark.flood_stage=95%
+      - cluster.routing.allocation.disk.watermark.high=99%
+      - cluster.routing.allocation.disk.watermark.flood_stage=99.5%
+    mem_limit: 4g
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
-      - ./data/elasticsearch:/usr/share/elasticsearch/data
+      - ./backend/data/elasticsearch:/usr/share/elasticsearch/data
     networks:
       - elastic
     healthcheck:
@@ -61,60 +71,81 @@ services:
       retries: 5
 
   paradedb:
-    image: paradedb/paradedb:0.15.14
-    container_name: btaa-ogm-api-paradedb
+    image: paradedb/paradedb:0.18.11
+    container_name: opengeometadata-api-paradedb
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=btaa_ogm_api
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=opengeometadata_api
     ports:
-      - "2345:5432"
+      - "127.0.0.1:2345:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ./backend/data/postgres:/var/lib/postgresql/data
     networks:
       - elastic
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d btaa_ogm_api"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d opengeometadata_api"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
-    image: redis:7.2
-    container_name: btaa-ogm-api-redis
-    command: redis-server --appendonly yes  # Enable persistence
+    image: redis:7.4.6-alpine
+    container_name: opengeometadata-api-redis
+    command:
+      - sh
+      - -lc
+      - >
+        exec redis-server
+        --appendonly yes
+        --protected-mode yes
+        --bind 0.0.0.0
+        --requirepass "${REDIS_PASSWORD:-changeme}"
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
     volumes:
-      - ./data/redis:/data
+      - ./backend/data/redis:/data
     networks:
       - elastic
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "sh", "-lc", "redis-cli -a \"${REDIS_PASSWORD:-changeme}\" ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 5
+      start_period: 60s
 
   celery_worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: btaa-ogm-api-celery
-    command: celery -A app.tasks.worker worker --loglevel=INFO
+    container_name: opengeometadata-api-celery
+    command: bash -lc "cd /app/backend && celery -A app.tasks.worker worker -E --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --prefetch-multiplier=1"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@paradedb:5432/btaa_ogm_api
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@paradedb:5432/opengeometadata_api
+      - DB_POOL_MIN=1
+      - DB_POOL_MAX=2
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
       - REDIS_TTL=604800
-      - PYTHONUNBUFFERED=1  # Important for logging
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/backend
+      - LOG_PATH=/app/logs
       - LOG_LEVEL=DEBUG
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-3.5-turbo}
+      - IS_DOCKER=true
+      - OGM_WEBHOOK_SECRET=${OGM_WEBHOOK_SECRET:-changeme}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-}
     volumes:
       - ./logs:/app/logs
+      - .:/app
     depends_on:
-      - redis
-      - paradedb
+      redis:
+        condition: service_healthy
+      paradedb:
+        condition: service_healthy
     networks:
       - elastic
 
@@ -122,30 +153,34 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: btaa-ogm-api-flower
-    command: >
-      bash -c "cd /app && celery -A app.tasks.worker flower --port=5555"
+    container_name: opengeometadata-api-flower
+    command: bash -lc "cd /app/backend && celery -A app.tasks.worker --broker=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0 flower --port=5555"
     ports:
-      - "5555:5555"
+      - "127.0.0.1:5555:5555"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@paradedb:5432/btaa_ogm_api
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_TTL=604800
-      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@paradedb:5432/opengeometadata_api
+      - DB_POOL_MIN=1
+      - DB_POOL_MAX=2
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
+      - FLOWER_UNAUTHENTICATED_API=true
+      - PYTHONPATH=/app/backend
+      - LOG_PATH=/app/logs
       - LOG_LEVEL=DEBUG
+      - IS_DOCKER=true
+    volumes:
+      - ./logs:/app/logs
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      paradedb:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
     networks:
       - elastic
-    depends_on:
-      - redis
-      - paradedb
-      - celery_worker
-
-volumes:
-  elasticsearch-data:
-  paradedb-data:
-  redis-data:
 
 networks:
   elastic:
-    driver: bridge 
+    driver: bridge

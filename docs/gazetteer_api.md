@@ -1,6 +1,6 @@
 # Gazetteer API Documentation
 
-The BTAA Geoportal API provides access to multiple gazetteers (GeoNames, Who's on First, and BTAA) through a unified API. This document describes the available endpoints and how to use them.
+The OpenGeoMetadata API provides access to multiple gazetteers (GeoNames, Who's on First, BTAA, and FAST) through a unified API. This document describes the available endpoints and how to use them.
 
 ## Overview
 
@@ -477,22 +477,21 @@ The gazetteer API uses the following environment variables:
 | ENDPOINT_CACHE | Enable/disable endpoint caching | false |
 | GAZETTEER_CACHE_TTL | Cache duration in seconds | 3600 (1 hour) |
 | REDIS_HOST | Redis host for caching | localhost |
-| REDIS_PORT | Redis port | 6379 |
+| REDIS_PORT | Redis port | 6380 |
 | REDIS_PASSWORD | Redis password | None |
 
 ## Importing Gazetteer Data
 
-To import gazetteer data, use the `app/gazetteer/import_all.py` script:
+To import gazetteer data, run the backend import workflow:
 
 ```bash
-# Run the script to import all gazetteers
-python app/gazetteer/import_all.py
+cd backend
 
-# Import specific gazetteers
+# Run the standard gazetteer loader
+python scripts/run_gazetteers.py
+
+# Or call the lower-level importer directly
 python app/gazetteer/import_all.py --gazetteers geonames wof
-
-# Specify a custom data directory
-python app/gazetteer/import_all.py --data-dir /path/to/data
 
 # Output detailed results to a file
 python app/gazetteer/import_all.py --output import_results.json

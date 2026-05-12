@@ -125,11 +125,15 @@ celerybeat.pid
 .env
 .env.test
 .venv
+.DS_Store
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Kamal
+.kamal/
 
 # Spyder project settings
 .spyderproject
@@ -162,29 +166,15 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Data
+# Repo-local scratch space
+tmp/*
 
-# Fixtures
-data/fixtures/*.csv
-
-# Gazetteer data
-data/gazetteers/**/*.csv
-data/gazetteers/**/*.txt
-data/gazetteers/**/*.db
-data/gazetteers/**/*.bz2
-data/gazetteers/**/*.marcxml
-data/gazetteers/**/*.zip
-
-# Elasticsearch data
-data/elasticsearch/*
-
-# Postgres data
-data/postgres/*
-data/postgres_test/*
-
-# Redis data
-data/redis/*
-
-
-
-
+# Backend runtime data
+backend/data/postgres/*
+backend/data/postgres_test/*
+backend/data/elasticsearch/*
+backend/data/redis/*
+backend/data/duckdb/*
+backend/data/gazetteers/*
+backend/data/opengeometadata/*
+backend/data/harvest_dumps/*

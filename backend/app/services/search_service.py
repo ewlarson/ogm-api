@@ -1,0 +1,618 @@
+import inspect
+import json
+import logging
+import os
+import time
+from typing import Dict, Optional
+from urllib.parse import parse_qs
+
+from elasticsearch.exceptions import NotFoundError
+from fastapi import HTTPException
+
+from app.api.v1.shared import SORT_MAPPINGS
+from app.api.v1.utils import create_jsonapi_resource, sanitize_for_json
+from app.elasticsearch import search_resources
+from app.elasticsearch.client import es
+from app.elasticsearch.search import _normalize_geo_params
+from app.elasticsearch.suggest import normalize_suggestion_text, suggestion_sort_key
+from app.services.citation_service import CitationService
+from app.services.distribution_repository import (
+    build_distribution_context,
+    fetch_distribution_context,
+    fetch_distribution_context_map,
+)
+from app.services.download_service import DownloadService
+from app.services.image_service import ImageService
+from app.services.relationship_service import RelationshipService
+from app.services.viewer_service import ViewerService, create_viewer_attributes
+from db.database import database
+
+logger = logging.getLogger(__name__)
+
+
+class SearchService:
+    def __init__(self):
+        self.index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+        self.es = es
+
+    async def search(
+        self,
+        q: Optional[str],
+        page: int = 1,
+        limit: int = 10,
+        sort: Optional[str] = None,
+        search_fields: Optional[str] = None,
+        request_query_params: Optional[str] = None,
+        callback: Optional[str] = None,
+        facets: Optional[str] = None,
+        include_filters: Optional[Dict] = None,
+        exclude_filters: Optional[Dict] = None,
+        fq_direct: Optional[Dict] = None,
+        adv_q: Optional[list] = None,
+    ) -> Dict:
+        """Search endpoint with caching support."""
+        try:
+            timings = {}
+            start_time = time.time()
+
+            # Calculate skip from page/limit
+            skip = (page - 1) * limit
+
+            # Get filter queries either from direct input (POST) or from request params (GET)
+            if fq_direct is not None:
+                filter_query = fq_direct
+            else:
+                filter_query = (
+                    self.extract_filter_queries(request_query_params)
+                    if request_query_params
+                    else {}
+                )
+
+            logger.info(
+                f"SearchService.search: include_filters={include_filters}, "
+                f"exclude_filters={exclude_filters}, "
+                f"request_query_params="
+                f"{request_query_params[:200] if request_query_params else None}..."
+            )
+            if include_filters is None or exclude_filters is None:
+                logger.info(
+                    "SearchService.search: Extracting new style filters from request_query_params"
+                )
+                parsed_include, parsed_exclude = self.extract_new_style_filters(
+                    request_query_params
+                )
+                logger.info(
+                    f"SearchService.search: Parsed include_filters={parsed_include}, "
+                    f"exclude_filters={parsed_exclude}"
+                )
+                include_filters = include_filters if include_filters is not None else parsed_include
+                exclude_filters = exclude_filters if exclude_filters is not None else parsed_exclude
+            logger.info(
+                f"SearchService.search: Final include_filters={include_filters}, "
+                f"exclude_filters={exclude_filters}"
+            )
+
+            # Get sort mapping
+            sort_mapping = SORT_MAPPINGS.get(sort, None)
+
+            # Elasticsearch query
+            es_start = time.time()
+            results = await search_resources(
+                query=q,
+                fq=filter_query,
+                skip=skip,
+                limit=limit,
+                sort=sort_mapping,
+                search_fields=search_fields,
+                include_filters=include_filters,
+                exclude_filters=exclude_filters,
+                facets=facets,
+                adv_q=adv_q,
+            )
+            # Defensive: ensure results is a dict
+            if not isinstance(results, dict):
+                results = {}
+            es_time = (time.time() - es_start) * 1000
+            timings["elasticsearch"] = f"{es_time:.0f}ms"
+
+            # Process each resource
+            process_start = time.time()
+            docs_processed = 0
+            citation_time = 0
+            thumbnail_time = 0
+            viewer_time = 0
+
+            resource_ids = [
+                resource.get("id") for resource in results.get("data", []) if resource.get("id")
+            ]
+            distribution_contexts = await fetch_distribution_context_map(resource_ids)
+
+            for resource in results.get("data", []):
+                resource_id = resource.get("id")
+                distribution_context = distribution_contexts.get(
+                    resource_id, build_distribution_context(resource_id or "", [])
+                )
+
+                # Add thumbnail URL
+                thumb_start = time.time()
+                image_service = ImageService(
+                    resource["attributes"], distribution_context=distribution_context
+                )
+                resource["attributes"]["ui_thumbnail_url"] = image_service.get_thumbnail_url()
+                thumbnail_time += time.time() - thumb_start
+
+                # Add citation
+                cite_start = time.time()
+                citation_service = CitationService(
+                    resource["attributes"], distribution_context=distribution_context
+                )
+                resource["attributes"]["ui_citation"] = citation_service.get_citation()
+                citation_time += time.time() - cite_start
+
+                # Add viewer attributes
+                viewer_start = time.time()
+                viewer_attrs = create_viewer_attributes(
+                    resource["attributes"], distribution_context=distribution_context
+                )
+                resource["attributes"].update(viewer_attrs)
+                viewer_time += time.time() - viewer_start
+
+                docs_processed += 1
+
+            process_time = time.time() - process_start
+            timings["resourceProcessing"] = {
+                "total": f"{(process_time * 1000):.0f}ms",
+                "perResource": (
+                    f"{((process_time / docs_processed) * 1000):.0f}ms"
+                    if docs_processed > 0
+                    else "0ms"
+                ),
+                "thumbnailService": f"{(thumbnail_time * 1000):.0f}ms",
+                "citationService": f"{(citation_time * 1000):.0f}ms",
+                "viewerService": f"{(viewer_time * 1000):.0f}ms",
+            }
+
+            total_time = time.time() - start_time
+            timings["totalResponseTime"] = f"{(total_time * 1000):.0f}ms"
+
+            results["queryTime"] = timings
+
+            # Extract and add suggestions to meta if they exist
+            if isinstance(results, dict) and "meta" in results and "suggestions" in results["meta"]:
+                results["meta"]["spellingSuggestions"] = results["meta"].pop("suggestions")
+
+            # Sanitize the entire results object for JSON
+            sanitized_results = sanitize_for_json(results)
+
+            return sanitized_results
+
+        except Exception as e:
+            logger.error("Search service error", exc_info=True)
+            return {
+                "message": "Search operation failed",
+                "error": str(e),
+                "query": q,
+                "filters": filter_query if "filter_query" in locals() else None,
+                "sort": sort,
+            }
+
+    async def get_resource(
+        self,
+        id: str,
+        callback: Optional[str] = None,
+        include_relationships: bool = True,
+        include_summaries: bool = True,
+    ) -> Dict:
+        """Get a single resource by ID."""
+        try:
+            # Get the resource from Elasticsearch
+            try:
+                result = es.get(index=self.index_name, id=id)
+                if inspect.isawaitable(result):
+                    result = await result
+            except NotFoundError:
+                raise HTTPException(status_code=404, detail="Resource not found") from None
+            except Exception as e:
+                logger.error("Elasticsearch error getting resource %s", id, exc_info=True)
+                raise HTTPException(status_code=500, detail=str(e)) from e
+
+            source_data = result["_source"]
+            references = source_data.get("dct_references_s")
+            if isinstance(references, str):
+                try:
+                    source_data["dct_references_s"] = json.loads(references)
+                except json.JSONDecodeError:
+                    pass
+
+            # Create services
+            distribution_context = await fetch_distribution_context(id)
+            download_service = DownloadService(
+                source_data, distribution_context=distribution_context
+            )
+            viewer_service = ViewerService(source_data, distribution_context=distribution_context)
+            citation_service = CitationService(
+                source_data, distribution_context=distribution_context
+            )
+
+            # Add UI attributes in the same order as the original code
+            source_data["ui_thumbnail_url"] = source_data.get("thumbnail_url")
+            source_data["ui_citation"] = citation_service.get_citation()
+            ui_downloads = download_service.get_download_options_with_bridge_asset_downloads()
+            if inspect.isawaitable(ui_downloads):
+                ui_downloads = await ui_downloads
+            source_data["ui_downloads"] = ui_downloads
+
+            # Add viewer attributes
+            viewer_attributes = viewer_service.get_viewer_attributes()
+            source_data.update(viewer_attributes)
+
+            # Add relationships if requested
+            if include_relationships:
+                try:
+                    relationship_service = RelationshipService()
+                    relationships = relationship_service.get_resource_relationships(id)
+                    if inspect.isawaitable(relationships):
+                        relationships = await relationships
+                    source_data["ui_relationships"] = relationships
+                except Exception as e:
+                    logger.error(f"Error getting relationships: {e}", exc_info=True)
+                    source_data["ui_relationships"] = {}
+
+            # Add summaries if requested
+            if include_summaries:
+                try:
+                    summaries_query = """
+                        SELECT * FROM resource_ai_enrichments 
+                        WHERE resource_id = :resource_id 
+                        ORDER BY created_at DESC
+                    """
+                    summaries = database.fetch_all(summaries_query, {"resource_id": id})
+                    if inspect.isawaitable(summaries):
+                        summaries = await summaries
+                    source_data["ui_summaries"] = [
+                        sanitize_for_json(dict(summary)) for summary in summaries
+                    ]
+                except Exception as e:
+                    logger.error(f"Error getting summaries: {e}", exc_info=True)
+                    source_data["ui_summaries"] = []
+
+            response = {"data": create_jsonapi_resource(source_data)}
+
+            return response
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Error getting resource %s", id, exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    async def suggest(self, q: str, resource_class: Optional[str] = None, size: int = 5) -> Dict:
+        """Get search suggestions."""
+        try:
+            raw_size = max(size * 4, 10)
+            suggest_query = {
+                "suggest": {
+                    "my-suggestion": {
+                        "prefix": q,
+                        "completion": {
+                            "field": "suggest",
+                            "size": raw_size,
+                            "skip_duplicates": True,
+                            "fuzzy": {"fuzziness": "AUTO"},
+                        },
+                    }
+                },
+            }
+            response = es.search(index=self.index_name, body=suggest_query)
+            if inspect.isawaitable(response):
+                response = await response
+            response_dict = response.body
+            suggestions_by_id = {}
+            suggestions_by_text = {}
+
+            if response_dict.get("suggest", {}).get("my-suggestion"):
+                for suggestion in response_dict["suggest"]["my-suggestion"]:
+                    if options := suggestion.get("options", []):
+                        for option in options:
+                            normalized_text = normalize_suggestion_text(option.get("text", ""))
+                            if not normalized_text:
+                                continue
+
+                            suggestion_score = option.get("_score", 0)
+                            suggestion_candidate = {
+                                "type": "suggestion",
+                                "id": option["_id"],
+                                "attributes": {
+                                    "text": normalized_text,
+                                    "score": suggestion_score,
+                                },
+                            }
+                            existing_by_id = suggestions_by_id.get(option["_id"])
+                            if existing_by_id and suggestion_sort_key(
+                                existing_by_id["attributes"]["text"],
+                                q,
+                                existing_by_id["attributes"]["score"],
+                            ) <= suggestion_sort_key(normalized_text, q, suggestion_score):
+                                continue
+
+                            suggestions_by_id[option["_id"]] = suggestion_candidate
+
+            for suggestion_candidate in suggestions_by_id.values():
+                normalized_text = suggestion_candidate["attributes"]["text"]
+                existing_by_text = suggestions_by_text.get(normalized_text)
+                if existing_by_text and suggestion_sort_key(
+                    existing_by_text["attributes"]["text"],
+                    q,
+                    existing_by_text["attributes"]["score"],
+                ) <= suggestion_sort_key(
+                    normalized_text,
+                    q,
+                    suggestion_candidate["attributes"]["score"],
+                ):
+                    continue
+
+                suggestions_by_text[normalized_text] = suggestion_candidate
+
+            suggestions = sorted(
+                suggestions_by_text.values(),
+                key=lambda item: suggestion_sort_key(
+                    item["attributes"]["text"],
+                    q,
+                    item["attributes"]["score"],
+                ),
+            )[:size]
+            return {
+                "data": suggestions,
+                "meta": {
+                    "query": q,
+                    "resource_class": resource_class,
+                    "es_query": suggest_query,
+                    "es_response": response_dict,
+                },
+            }
+        except Exception as e:
+            logger.error("Error getting suggestions", exc_info=True)
+            return {"data": [], "meta": {"error": str(e)}}
+
+    def extract_filter_queries(self, params: str) -> Dict:
+        """Extract filter queries from request parameters."""
+        filter_query = {}
+        # Parse the raw query string to handle multiple values
+        raw_params = parse_qs(str(params))
+
+        agg_to_field = {
+            "id_agg": "id.keyword",
+            "spatial_agg": "dct_spatial_sm",
+            "resource_type_agg": "gbl_resourceType_sm",
+            "resource_class_agg": "gbl_resourceClass_sm",
+            "index_year_agg": "gbl_indexYear_im",
+            "language_agg": "dct_language_sm",
+            "creator_agg": "dct_creator_sm",
+            "publisher_agg": "dct_publisher_sm",
+            "provider_agg": "schema_provider_s",
+            "b1g_code_agg": "b1g_code_s",
+            "access_rights_agg": "dct_accessRights_s",
+            "georeferenced_agg": "gbl_georeferenced_b",
+            # Spatial facet fields
+            "geo_country_agg": "geo_country",
+            "geo_region_agg": "geo_region",
+            "geo_county_agg": "geo_county",
+            # Relationship filters (has part / is part of; collection records / member of)
+            "dct_isPartOf_sm": "dct_isPartOf_sm",
+            "pcdm_memberOf_sm": "pcdm_memberOf_sm",
+            # Local collection label (facets in Full Details)
+            "b1g_localCollectionLabel_sm": "b1g_localCollectionLabel_sm",
+        }
+
+        # Define allowed direct fields (the mapping values)
+        allowed_direct_fields = set(agg_to_field.values())
+
+        for key, values in raw_params.items():
+            if key.startswith("fq[") and key.endswith("][]"):
+                # Allow aggregation aliases or direct ES fields; ignore unknown
+                name = key[3:-3]  # Remove 'fq[' and '[]'
+                if name in agg_to_field:
+                    es_field = agg_to_field[name]
+                elif name in allowed_direct_fields:
+                    es_field = name
+                else:
+                    continue
+                if values:
+                    filter_query[es_field] = values
+            elif key.startswith("fq[") and key.endswith("]"):
+                # Single value form fq[field]=value
+                name = key[3:-1]
+                if name in agg_to_field:
+                    es_field = agg_to_field[name]
+                elif name in allowed_direct_fields:
+                    es_field = name
+                else:
+                    continue
+                if values:
+                    filter_query[es_field] = values[0]
+
+        return filter_query
+
+    def extract_new_style_filters(self, params: Optional[str]) -> tuple[Dict, Dict]:
+        """
+        Extract include/exclude filters passed as
+        include_filters[field][]= and exclude_filters[field][].
+        Also handles geospatial filters like include_filters[geo][type]=bbox.
+        """
+        include_filters: Dict[str, list] = {}
+        exclude_filters: Dict[str, list] = {}
+        if not params:
+            logger.info("extract_new_style_filters: No params provided")
+            return include_filters, exclude_filters
+        logger.info(
+            f"extract_new_style_filters: Parsing params: {params[:200] if params else 'None'}..."
+        )
+        # parse_qs expects a URL-decoded query string
+        # If params is URL-encoded (contains %5B for [), decode it first
+        from urllib.parse import unquote
+
+        if params and "%5B" in params:
+            # URL-encoded brackets detected, decode first
+            decoded_params = unquote(params)
+            logger.info(f"extract_new_style_filters: Decoded params sample: {decoded_params[:200]}")
+            raw_params = parse_qs(decoded_params)
+        elif isinstance(params, str):
+            raw_params = parse_qs(params)
+        else:
+            raw_params = parse_qs(str(params))
+        logger.info(f"extract_new_style_filters: Found {len(raw_params)} raw params")
+        geo_keys = [k for k in raw_params.keys() if "geo" in k.lower()]
+        logger.info(f"extract_new_style_filters: Geo-related keys: {geo_keys}")
+        logger.info(f"extract_new_style_filters: All keys sample: {list(raw_params.keys())[:10]}")
+
+        # Convenience filters (non-bracket style) for common client use cases.
+        # Example: ogm_repo[]=edu.stanford.purl&ogm_repo[]=edu.umn
+        if "ogm_repo[]" in raw_params:
+            include_filters.setdefault("ogm_repo", []).extend(raw_params.get("ogm_repo[]") or [])
+
+        # Handle geospatial filters
+        geo_filters = {}
+        for key, values in raw_params.items():
+            if key.startswith("include_filters[geo]["):
+                # Skip array-style parameters like "include_filters[geo][]"
+                # These are duplicates/artifacts
+                if key == "include_filters[geo][]" or key.endswith("][]") and key.count("[") == 2:
+                    # This is an array-style parameter without a proper key name, skip it
+                    continue
+
+                # Extract the geospatial parameter (e.g., "type", "field", "top_left[lat]")
+                # Handle both "include_filters[geo][param]"
+                # and "include_filters[geo][param][]" formats
+                prefix = "include_filters[geo]["
+                if key.endswith("][]"):
+                    # Array-style parameter like "include_filters[geo][type][]"
+                    geo_param = key[len(prefix) : -len("][]")]
+                elif key.startswith(prefix):
+                    # Regular parameter like "include_filters[geo][type]"
+                    # or "include_filters[geo][top_left][lat]"
+                    # or "include_filters[geo][points][0][lat]"
+                    # Remove the prefix, keep the rest (including any nested brackets)
+                    geo_param = key[len(prefix) :]
+
+                    # Special handling for points array format: "points][0][lat]"
+                    # Handle this before general bracket processing - skip conversion
+                    if geo_param.startswith("points][") and geo_param.count("][") >= 2:
+                        # Keep as "points][0][lat]" format for special handling below
+                        # Don't modify geo_param, it will be handled in the points parsing section
+                        pass
+                    # Remove trailing ] if present (for simple params like "type]")
+                    # But keep it if it's part of nested structure like "top_left][lat]"
+                    elif geo_param.endswith("]"):
+                        # Check if this is a nested param (has [ before the final ])
+                        last_bracket_idx = geo_param.rfind("[")
+                        if last_bracket_idx == -1:
+                            # No nested brackets, remove trailing ]
+                            geo_param = geo_param[:-1]
+                        else:
+                            # Has nested brackets, the structure is "parent][child]"
+                            # We want "parent[child]", so remove the ] before the [
+                            # Actually, the structure is correct:
+                            # "top_left][lat]" means parent="top_left]", child="lat"
+                            # But we want parent="top_left", child="lat", so we need to fix this
+                            # The issue is that "top_left][lat]" should be parsed as
+                            # parent="top_left", child="lat"
+                            # So we need to split on "][" to get ["top_left", "lat]"]
+                            # and then remove the trailing ] from the child
+                            if "][" in geo_param:
+                                parts = geo_param.split("][")
+                                if len(parts) == 2:
+                                    parent = parts[0]
+                                    child = parts[1].rstrip("]")
+                                    geo_param = f"{parent}[{child}]"
+                else:
+                    continue
+
+                # Skip empty parameter names
+                if not geo_param:
+                    continue
+
+                # Handle nested parameters like top_left[lat] or points[0][lat]
+                # Note: points][0][lat] format should be passed through to _normalize_geo_params
+                # which handles the conversion from flat keys to nested structure
+                if "[" in geo_param and "]" in geo_param:
+                    # Check if this is an array-style parameter like "points][0][lat]"
+                    # or "points[0][lat]"
+                    # The format after prefix removal is "points][0][lat]" (with ] between parts)
+                    if geo_param.startswith("points"):
+                        # For points, we need to pass the key through to _normalize_geo_params
+                        # which will handle the conversion. Store it with the original key format.
+                        # The _normalize_geo_params function expects keys like "points][0][lat]"
+                        # So we store it as a flat key that will be processed by normalization
+                        geo_filters[geo_param] = values[0] if values else None
+                        value_str = values[0] if values else None
+                        logger.info(f"  Added points param (raw): {geo_param} = {value_str}")
+                        continue
+
+                    # This is a nested parameter like "top_left][lat]" or "top_left[lat]"
+                    if "][" in geo_param:
+                        # Format: "top_left][lat]"
+                        parts = geo_param.split("][")
+                        if len(parts) == 2:
+                            parent_key = parts[0]
+                            child_key = parts[1].rstrip("]")
+                            if parent_key not in geo_filters:
+                                geo_filters[parent_key] = {}
+                            geo_filters[parent_key][child_key] = values[0] if values else None
+                            logger.info(
+                                f"  Added nested param: {parent_key}[{child_key}] = "
+                                f"{values[0] if values else None}"
+                            )
+                    else:
+                        # Format: "top_left[lat]"
+                        parent_key = geo_param.split("[")[0]
+                        child_key = geo_param.split("[")[1].split("]")[0]
+                        if parent_key not in geo_filters:
+                            geo_filters[parent_key] = {}
+                        geo_filters[parent_key][child_key] = values[0] if values else None
+                        logger.info(
+                            f"  Added nested param: {parent_key}[{child_key}] = "
+                            f"{values[0] if values else None}"
+                        )
+                else:
+                    # For simple parameters, use the first value if not already set
+                    # This handles duplicate parameters by taking the first occurrence
+                    if geo_param not in geo_filters:
+                        geo_filters[geo_param] = values[0] if values else None
+                        logger.info(
+                            f"  Added simple param: {geo_param} = {values[0] if values else None}"
+                        )
+
+        # If we have geospatial filters, add them to include_filters
+        if geo_filters:
+            logger.info(f"Raw geo_filters before normalization: {geo_filters}")
+            normalized_geo = _normalize_geo_params(geo_filters)
+            logger.info(f"Normalized geo_filters: {normalized_geo}")
+            include_filters["geo"] = normalized_geo
+        else:
+            logger.warning(
+                f"No geo_filters found! Processed {len(raw_params)} params, geo_keys: {geo_keys}"
+            )
+
+        # Handle year_range filters
+        year_range_filters = {}
+        for key, values in raw_params.items():
+            if key.startswith("include_filters[year_range][") and key.endswith("]"):
+                sub_key = key[len("include_filters[year_range][") : -1]  # start or end
+                year_range_filters[sub_key] = values[0] if values else None
+
+        if year_range_filters:
+            include_filters["year_range"] = year_range_filters
+
+        # Handle regular field filters
+        for key, values in raw_params.items():
+            if (
+                key.startswith("include_filters[")
+                and key.endswith("][]")
+                and not key.startswith("include_filters[geo][")
+            ):
+                field = key[len("include_filters[") : -len("][]")]
+                include_filters[field] = values
+            if key.startswith("exclude_filters[") and key.endswith("][]"):
+                field = key[len("exclude_filters[") : -len("][]")]
+                exclude_filters[field] = values
+        return include_filters, exclude_filters

@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"validate_aardvark_record","arguments":{"record":{"id":"test","dct_title_s":"Test","gbl_mdVersion_s":"InvalidVersion"}}}}

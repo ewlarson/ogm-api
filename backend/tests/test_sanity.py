@@ -1,0 +1,67 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+@pytest.fixture
+def test_client():
+    """Create a test client."""
+    with TestClient(app) as client:
+        yield client
+
+
+@pytest.mark.unit
+def test_application_startup():
+    """Test that the application starts without errors."""
+    client = TestClient(app)
+    response = client.get("/api/v1")
+    assert response.status_code == 200
+
+
+@pytest.mark.unit
+def test_api_docs_available():
+    """Test that the API documentation is available."""
+    client = TestClient(app)
+    response = client.get("/api/docs")
+    assert response.status_code == 200
+    # Accept either swagger UI or fallback HTML (when templates aren't available)
+    assert (
+        "swagger" in response.text.lower()
+        or "openapi" in response.text.lower()
+        or "btaa geospatial api" in response.text.lower()
+    )
+    assert "/api/v1/ogm/repos/dashboard" in response.text
+
+
+@pytest.mark.unit
+def test_root_redirects_to_api_docs():
+    """Test that the site root redirects to the API documentation."""
+    client = TestClient(app)
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 308
+    assert response.headers["location"] == "/api/docs"
+
+
+@pytest.mark.unit
+def test_redoc_available():
+    """Test that the ReDoc documentation is available."""
+    client = TestClient(app)
+    response = client.get("/api/redoc")
+    assert response.status_code == 200
+    assert "redoc" in response.text.lower()
+
+
+@pytest.mark.integration
+@pytest.mark.database
+def test_api_version():
+    """Test that the API root returns a response with version info."""
+    client = TestClient(app)
+    response = client.get("/api/v1")
+    assert response.status_code == 200
+    data = response.json()
+    assert "data" in data
+    assert "attributes" in data["data"]
+    assert "version" in data["data"]["attributes"]
+    assert "api" in data["data"]["attributes"]
+    assert data["data"]["attributes"]["api"] == "BTAA Geospatial API"
