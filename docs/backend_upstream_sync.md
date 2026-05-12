@@ -74,6 +74,22 @@ This gives us both:
 
 - discovery of newly created OpenGeoMetadata repositories
 - near-real-time harvesting when records change in watched repos
+- nightly reconciliation if a webhook delivery is missed
+
+For near-real-time harvesting, configure an OpenGeoMetadata organization webhook:
+
+- Payload URL: `https://ogm.geo4lib.app/api/v1/admin/ogm/webhook`
+- Content type: `application/json`
+- Secret: production `OGM_WEBHOOK_SECRET`
+- Events: `repository`, `public`, and `push`
+
+The webhook handler:
+
+- accepts `repository` events for repo creation/visibility/transfer/unarchive workflows
+- accepts `public` events when an existing repo becomes public
+- accepts `push` events when changed files include `metadata-aardvark/`
+- checks whether the repo has a top-level `metadata-aardvark/` directory before enabling it
+- stores Aardvark repos with `ogm_watch_mode="both"` so webhook harvests and nightly harvests both apply
 
 GitHub’s current docs indicate that:
 
