@@ -95,6 +95,17 @@ The backend includes:
 
 Set `GITHUB_TOKEN` in `.env` before running the OGM sync scripts if you want to avoid low unauthenticated GitHub API rate limits.
 
+For near-real-time harvesting, configure an OpenGeoMetadata organization webhook:
+
+- Payload URL: `https://ogm.geo4lib.app/api/v1/admin/ogm/webhook`
+- Content type: `application/json`
+- Secret: production `OGM_WEBHOOK_SECRET`
+- Events: `repository`, `public`, and `push`
+
+The webhook discovers newly created/publicized/transferred/unarchived OGM repos, enables repos
+with a top-level `metadata-aardvark/` directory, and queues harvests when pushes touch
+`metadata-aardvark/`. The nightly job remains the reconciliation path in case a delivery is missed.
+
 For a first local bootstrap with real OGM data:
 
 ```bash
