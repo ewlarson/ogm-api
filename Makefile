@@ -1,4 +1,4 @@
-.PHONY: lint format lint-check test test-fast test-no-coverage migrate reindex gazetteers ogm-nightly
+.PHONY: lint format lint-check test test-fast test-no-coverage migrate reindex gazetteers ogm-nightly cache-prime cache-prime-background kamal-registry-login
 
 BACKEND_DIR = backend
 
@@ -39,3 +39,12 @@ gazetteers:
 
 ogm-nightly:
 	cd $(BACKEND_DIR) && python scripts/trigger_ogm_nightly_sync.py
+
+cache-prime:
+	cd $(BACKEND_DIR) && python scripts/prime_generated_caches.py $(ARGS)
+
+cache-prime-background:
+	cd $(BACKEND_DIR) && ./scripts/start_cache_prime_background.sh $(ARGS)
+
+kamal-registry-login:
+	./scripts/kamal_registry_login.sh

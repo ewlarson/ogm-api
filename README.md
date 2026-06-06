@@ -65,6 +65,7 @@ cd backend && python scripts/trigger_ogm_nightly_sync.py --dry-run
 cd backend && python scripts/run_migrations.py
 cd backend && python scripts/run_index.py
 cd backend && python scripts/run_gazetteers.py
+cd backend && python scripts/prime_generated_caches.py --limit 100
 ```
 
 Or use Make targets:
@@ -74,6 +75,8 @@ make migrate
 make reindex
 make gazetteers
 make ogm-nightly
+make cache-prime ARGS="--limit 100"
+make cache-prime-background ARGS="--limit 1000"
 make test
 ```
 
@@ -82,6 +85,7 @@ If you prefer not to install Python dependencies locally, the same commands can 
 ```bash
 docker compose exec api bash -lc "cd /app/backend && python scripts/run_migrations.py"
 docker compose exec api bash -lc "cd /app/backend && python scripts/run_index.py"
+docker compose exec api bash -lc "cd /app/backend && python scripts/prime_generated_caches.py --limit 100"
 docker compose exec api bash -lc "cd /app/backend && python scripts/trigger_ogm_nightly_sync.py --dry-run"
 ```
 
@@ -121,12 +125,46 @@ GitHub Actions workflow for OGM repo discovery + harvest orchestration.
 
 See [docs/backend_upstream_sync.md](docs/backend_upstream_sync.md) for the upstream-sync and repo-watching strategy.
 
+## Generated Cache Priming
+
+After migrations and indexing, prebuild generated artifacts with:
+
+```bash
+make cache-prime ARGS="--limit 1000"
+```
+
+For a production background run after deploy:
+
+```bash
+kamal app exec "python /app/backend/scripts/run_migrations.py"
+kamal app exec "cd /app/backend && ./scripts/start_cache_prime_background.sh"
+kamal app exec "tail -f /app/backend/logs/prime_generated_caches.log"
+```
+
+The combined primer warms durable generated resource representations, thumbnail
+assets, and static-map/basemap assets. Full-corpus runs avoid hydrating every
+image body into Redis by default; add `--hydrate-assets` only for bounded hotsets
+or hosts sized for that memory profile.
+
+See [docs/cache_priming.md](docs/cache_priming.md) for details.
+
 ## Upstream Backend Sync
 
-Refresh the mirrored backend from your local `data-api` checkout with:
+This repo is maintained as the OpenGeoMetadata API product with `backend/`
+imported from `geobtaa/api`.
+
+Preview an upstream backend import:
 
 ```bash
 ./scripts/sync_backend_from_data_api.sh
 ```
 
-That keeps this repo aligned with upstream backend changes while preserving OGM-specific branding and operations at the repo root.
+Apply after review:
+
+```bash
+./scripts/sync_backend_from_data_api.sh --apply
+```
+
+The helper uses `git subtree split` to read only `geobtaa/api/backend`, protects
+OpenGeoMetadata-owned files from `config/ogm-owned-paths.txt`, and records
+applied import metadata in `config/geobtaa-backend-source.env`.
