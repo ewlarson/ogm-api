@@ -1,0 +1,29 @@
+# Paths intentionally owned by this OpenGeoMetadata downstream.
+#
+# The upstream backend sync helper protects backend/* entries in this file so
+# the BTAA backend import does not silently erase local branding, deployment,
+# and OGM harvesting behavior. Root-level entries document the wider overlay.
+
+.github/workflows/ogm-nightly-sync.yml
+Dockerfile
+Makefile
+README.md
+docker-compose.yml
+docs/
+scripts/
+
+backend/scripts/trigger_ogm_nightly_sync.py
+backend/scripts/prime_generated_caches.py
+backend/scripts/start_cache_prime_background.sh
+backend/db/migrations/backfill_resources_from_legacy_items.py
+backend/tests/db/migrations/
+backend/tests/db/migrations/test_backfill_resources_from_legacy_items.py
+backend/tests/api/v1/test_ogm_webhook.py
+backend/tests/services/test_ogm_harvest_repository.py
+backend/tests/tasks/test_ogm_harvest_tasks.py
+backend/static/brand.css
+backend/static/favicon.svg
+backend/static/opengeometadata-bauhaus-logo.svg
+backend/static/opengeometadata-map-legend-logo-composite.svg
+backend/templates/docs.html
+backend/templates/ogm_repo_dashboard.html
