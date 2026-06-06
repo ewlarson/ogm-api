@@ -50,6 +50,13 @@ class OGMHarvestRepository:
         empty_string = cast(literal(""), String())
         published_state = cast(literal("published"), String())
         ogm_repo_tag_prefix = cast(literal("ogm_repo:"), String())
+        effective_publication_state = func.lower(
+            func.coalesce(
+                func.nullif(resources.c.b1g_publication_state_s, empty_string),
+                func.nullif(resources.c.publication_state, empty_string),
+                published_state,
+            )
+        )
         published_available_record_count = (
             select(func.count())
             .select_from(resources)
@@ -59,17 +66,31 @@ class OGMHarvestRepository:
                     func.concat(ogm_repo_tag_prefix, ogm_repos.c.ogm_repo_name)
                 )
             )
-            .where(func.coalesce(resources.c.gbl_suppressed_b, False).is_(False))
+            .where(effective_publication_state == published_state)
+            .scalar_subquery()
+        )
+        suppressed_record_count = (
+            select(func.count())
+            .select_from(resources)
+            .where(resources.c.b1g_adminTags_sm.is_not(None))
             .where(
-                func.lower(
-                    func.coalesce(
-                        func.nullif(resources.c.b1g_publication_state_s, empty_string),
-                        func.nullif(resources.c.publication_state, empty_string),
-                        published_state,
-                    )
+                resources.c.b1g_adminTags_sm.any(
+                    func.concat(ogm_repo_tag_prefix, ogm_repos.c.ogm_repo_name)
                 )
-                == published_state
             )
+            .where(func.coalesce(resources.c.gbl_suppressed_b, False).is_(True))
+            .scalar_subquery()
+        )
+        unpublished_record_count = (
+            select(func.count())
+            .select_from(resources)
+            .where(resources.c.b1g_adminTags_sm.is_not(None))
+            .where(
+                resources.c.b1g_adminTags_sm.any(
+                    func.concat(ogm_repo_tag_prefix, ogm_repos.c.ogm_repo_name)
+                )
+            )
+            .where(effective_publication_state != published_state)
             .scalar_subquery()
         )
 
@@ -90,6 +111,8 @@ class OGMHarvestRepository:
                 ogm_harvest_runs.c.ogm_stats_json.label("last_run_stats_json"),
                 harvested_record_count.label("harvested_record_count"),
                 published_available_record_count.label("available_record_count"),
+                suppressed_record_count.label("suppressed_record_count"),
+                unpublished_record_count.label("unpublished_record_count"),
             )
             .select_from(
                 ogm_repos.outerjoin(
@@ -146,6 +169,8 @@ class OGMHarvestRepository:
                     "harvested_failure_count": _to_int(stats.get("errors")),
                     "harvested_record_count": _to_int(item.get("harvested_record_count")),
                     "available_record_count": _to_int(item.get("available_record_count")),
+                    "suppressed_record_count": _to_int(item.get("suppressed_record_count")),
+                    "unpublished_record_count": _to_int(item.get("unpublished_record_count")),
                     "harvest_failure_samples": list(stats.get("error_samples") or [])[:5],
                 }
             )
