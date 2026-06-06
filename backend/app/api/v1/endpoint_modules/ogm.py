@@ -59,9 +59,19 @@ async def ogm_repo_dashboard(request: Request):
     for repo in repos:
         harvested_count = int(repo.get("harvested_record_count") or 0)
         available_count = int(repo.get("available_record_count") or 0)
+        unpublished_count = int(repo.get("unpublished_record_count") or 0)
         has_aardvark = bool(repo.get("ogm_has_aardvark"))
         enabled = bool(repo.get("ogm_enabled"))
         last_harvest_completed = repo.get("last_crawl_completed_at")
+        hidden_count = max(harvested_count - available_count, 0)
+        other_hidden_count = max(hidden_count - unpublished_count, 0)
+        api_hidden_breakdown = []
+        if unpublished_count:
+            api_hidden_breakdown.append({"count": unpublished_count, "label": "unpublished"})
+        if other_hidden_count:
+            api_hidden_breakdown.append(
+                {"count": other_hidden_count, "label": "not yet synced"}
+            )
 
         total_harvested += harvested_count
         total_available += available_count
@@ -77,7 +87,8 @@ async def ogm_repo_dashboard(request: Request):
                 "display_last_harvest_started_at": _format_timestamp(
                     repo.get("last_crawl_started_at")
                 ),
-                "harvest_gap_count": max(harvested_count - available_count, 0),
+                "harvest_gap_count": hidden_count,
+                "api_hidden_breakdown": api_hidden_breakdown,
             }
         )
 
