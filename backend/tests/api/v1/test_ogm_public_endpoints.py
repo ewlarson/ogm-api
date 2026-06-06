@@ -77,6 +77,8 @@ def test_public_ogm_repo_dashboard_renders_html_monitor():
             "harvested_failure_count": 0,
             "harvested_record_count": 904,
             "available_record_count": 901,
+            "suppressed_record_count": 7,
+            "unpublished_record_count": 3,
         }
     ]
 
@@ -94,6 +96,9 @@ def test_public_ogm_repo_dashboard_renders_html_monitor():
     assert "edu.utexas" in response.text
     assert "OpenGeoMetadata/edu.utexas" in response.text
     assert "/api/v1/ogm/repos" in response.text
+    assert "3 unpublished" in response.text
+    assert "7 suppressed" not in response.text
+    assert "not yet published" not in response.text
 
 
 def test_public_ogm_failures_endpoint_lists_failed_runs():
