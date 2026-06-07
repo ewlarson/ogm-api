@@ -5,12 +5,14 @@ Tests for the Elasticsearch search functionality.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from app.elasticsearch.search import (
     BBOX_SPATIAL_BOOST_WEIGHT,
     MIN_BBOX_IOU_OVERLAP_RATIO,
     _compute_bbox_spatial_metrics,
     _escape_query_string_brackets,
+    _normalize_geo_bbox_bounds,
     get_search_criteria,
     map_h3_aggregation,
     search_resources,
@@ -19,6 +21,17 @@ from app.elasticsearch.search import (
 
 class TestElasticsearchSearch:
     """Test cases for Elasticsearch search functionality."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_search_aggregation_cache(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.elasticsearch.search._get_cached_search_aggregations",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(
+            "app.elasticsearch.search._store_cached_search_aggregations",
+            AsyncMock(),
+        )
 
     def test_escape_query_string_brackets(self):
         """Literal [] in user queries should be escaped for query_string."""
@@ -87,6 +100,16 @@ class TestElasticsearchSearch:
             "containment_ratio": 0.0,
             "spatial_score": 0.0,
         }
+
+    def test_normalize_geo_bbox_bounds_sorts_reversed_non_wrapped_longitudes(self):
+        """Small reversed bbox ranges should not be mistaken for antimeridian searches."""
+        bounds = _normalize_geo_bbox_bounds(
+            {"lat": 45.0, "lon": -104.0},
+            {"lat": 41.0, "lon": -109.0},
+        )
+
+        assert bounds is not None
+        assert bounds["lon_ranges"] == [(-109.0, -104.0)]
 
     @pytest.mark.asyncio
     async def test_search_resources_with_id_field_in_query_string(self):
@@ -232,6 +255,66 @@ class TestElasticsearchSearch:
                     "Minnesota",
                     "Wisconsin",
                 ]
+
+    @pytest.mark.asyncio
+    async def test_search_resources_uses_precomputed_global_bucket_field(self):
+        """Search facets should use the indexed geo_or_near_global boolean."""
+        mock_es = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.body = {
+            "hits": {"total": {"value": 0}, "hits": []},
+            "took": 1,
+            "aggregations": {},
+        }
+        mock_es.search.return_value = mock_response
+
+        with patch("app.elasticsearch.search.database.fetch_all") as mock_fetch:
+            mock_fetch.return_value = []
+
+            with patch("app.elasticsearch.search.es", mock_es):
+                await search_resources(query="test", fq=None, skip=0, limit=10, sort=None)
+
+        aggs = mock_es.search.call_args.kwargs["aggs"]
+        assert aggs["global_bucket_agg"] == {"filter": {"term": {"geo_or_near_global": True}}}
+
+    @pytest.mark.asyncio
+    async def test_search_resources_uses_cached_aggregations_when_available(self):
+        """Cached facet blocks should avoid recomputing aggs on the ES request."""
+        mock_es = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.body = {
+            "hits": {
+                "total": {"value": 1},
+                "hits": [{"_source": {"id": "test-id"}, "_score": 1.25}],
+            },
+            "took": 7,
+        }
+        mock_es.search.return_value = mock_response
+
+        cached_aggs = {
+            "schema_provider_s": {
+                "buckets": [{"key": "Provider A", "doc_count": 1}],
+            },
+            "global_bucket_agg": {"doc_count": 1},
+        }
+
+        with patch(
+            "app.elasticsearch.search._get_cached_search_aggregations",
+            AsyncMock(return_value=cached_aggs),
+        ):
+            with patch("app.elasticsearch.search.es", mock_es):
+                result = await search_resources(
+                    query="test",
+                    fq=None,
+                    skip=0,
+                    limit=10,
+                    sort=None,
+                    hydrate_hits=False,
+                )
+
+        assert "aggs" not in mock_es.search.call_args.kwargs
+        assert result["meta"]["mapStats"]["globalCount"] == 1
+        assert any(item["id"] == "schema_provider_s" for item in result["included"])
 
     @pytest.mark.asyncio
     async def test_map_h3_aggregation_applies_adv_q_to_hexes_and_global_count(self):
@@ -434,6 +517,104 @@ class TestElasticsearchSearch:
                 assert script_score["params"]["spatialBoostWeight"] == pytest.approx(
                     BBOX_SPATIAL_BOOST_WEIGHT
                 )
+
+    @pytest.mark.asyncio
+    async def test_search_resources_with_wrapped_leaflet_bbox_normalizes_longitudes(self):
+        """Leaflet world-copy longitudes should be normalized before hitting Elasticsearch."""
+        mock_es = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.body = {
+            "hits": {"total": {"value": 0}, "hits": []},
+            "took": 1,
+            "aggregations": {},
+        }
+        mock_es.search.return_value = mock_response
+
+        with patch("app.elasticsearch.search.database.fetch_all") as mock_fetch:
+            mock_fetch.return_value = []
+
+            with patch("app.elasticsearch.search.es", mock_es):
+                await search_resources(
+                    query=None,
+                    fq=None,
+                    skip=0,
+                    limit=5,
+                    sort=None,
+                    include_filters={
+                        "geo": {
+                            "type": "bbox",
+                            "field": "dcat_bbox",
+                            "relation": "intersects",
+                            "top_left": {"lat": 89.07, "lon": 73.85},
+                            "bottom_right": {"lat": -2.92, "lon": -198.96},
+                        }
+                    },
+                )
+
+                search_query = mock_es.search.call_args.kwargs["query"]
+                bool_query = search_query["script_score"]["query"]["bool"]
+                filters = bool_query["filter"]
+                geo_filter = next((f for f in filters if "geo_shape" in f), None)
+                assert geo_filter is not None
+                coords = geo_filter["geo_shape"]["dcat_bbox"]["shape"]["coordinates"]
+                assert coords[0] == pytest.approx([73.85, 89.07])
+                assert coords[1] == pytest.approx([161.04, -2.92])
+
+                params = search_query["script_score"]["script"]["params"]
+                assert params["qMinX"] == pytest.approx(73.85)
+                assert params["qMaxX"] == pytest.approx(161.04)
+
+    @pytest.mark.asyncio
+    async def test_search_resources_with_dateline_wrapped_bbox_splits_filter(self):
+        """Bboxes that wrap across the antimeridian should use valid ES coordinate ranges."""
+        mock_es = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.body = {
+            "hits": {"total": {"value": 0}, "hits": []},
+            "took": 1,
+            "aggregations": {},
+        }
+        mock_es.search.return_value = mock_response
+
+        with patch("app.elasticsearch.search.database.fetch_all") as mock_fetch:
+            mock_fetch.return_value = []
+
+            with patch("app.elasticsearch.search.es", mock_es):
+                await search_resources(
+                    query=None,
+                    fq=None,
+                    skip=0,
+                    limit=5,
+                    sort=None,
+                    include_filters={
+                        "geo": {
+                            "type": "bbox",
+                            "field": "dcat_bbox",
+                            "relation": "intersects",
+                            "top_left": {"lat": 75.36433760037893, "lon": -231.85546875000003},
+                            "bottom_right": {
+                                "lat": -11.868001792210991,
+                                "lon": 70.13671875000001,
+                            },
+                        }
+                    },
+                )
+
+                search_query = mock_es.search.call_args.kwargs["query"]
+                assert "script_score" not in search_query
+
+                filters = search_query["bool"]["filter"]
+                geo_filter = next((f for f in filters if "bool" in f), None)
+                assert geo_filter is not None
+
+                should = geo_filter["bool"]["should"]
+                coords = [
+                    clause["geo_shape"]["dcat_bbox"]["shape"]["coordinates"] for clause in should
+                ]
+                assert coords[0][0] == pytest.approx([128.14453125, 75.36433760037893])
+                assert coords[0][1] == pytest.approx([180.0, -11.868001792210991])
+                assert coords[1][0] == pytest.approx([-180.0, 75.36433760037893])
+                assert coords[1][1] == pytest.approx([70.13671875000001, -11.868001792210991])
 
     @pytest.mark.asyncio
     async def test_search_resources_with_geospatial_bbox_relation(self):
@@ -669,18 +850,25 @@ class TestElasticsearchSearch:
 
     @pytest.mark.asyncio
     async def test_search_resources_error_handling(self):
-        """Test search_resources error handling."""
+        """Elasticsearch failures should not expose query internals to callers."""
         # Mock the Elasticsearch client to raise an exception
         mock_es = AsyncMock()
-        mock_es.search.side_effect = Exception("Elasticsearch connection error")
+        mock_es.search.side_effect = Exception("Elasticsearch connection secret")
 
         # Mock the es client
         with patch("app.elasticsearch.search.es", mock_es):
             # Call search_resources and expect an exception
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises(HTTPException) as exc_info:
                 await search_resources(query="test", fq=None, skip=0, limit=10, sort=None)
 
-            assert "Elasticsearch connection error" in str(exc_info.value)
+            assert exc_info.value.status_code == 500
+            assert exc_info.value.detail == {
+                "message": "Elasticsearch query failed",
+                "code": "elasticsearch_query_failed",
+            }
+            assert "connection secret" not in str(exc_info.value.detail)
+            assert "query" not in exc_info.value.detail
+            assert "index" not in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_search_resources_with_suggestions(self):

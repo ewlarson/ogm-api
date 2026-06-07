@@ -24,9 +24,13 @@ def _create_app() -> FastAPI:
     async def thumbnail_asset(image_hash: str):
         return JSONResponse({"image_hash": image_hash})
 
-    @app.post("/api/v1/analytics/events")
-    async def analytics_events():
-        return JSONResponse({"status": "accepted"}, status_code=202)
+    @app.get("/api/docs")
+    async def docs():
+        return JSONResponse({"docs": True})
+
+    @app.get("/api/openapi.json")
+    async def openapi_schema():
+        return JSONResponse({"openapi": "3.1.0"})
 
     app.add_middleware(RateLimitMiddleware)
     return app
@@ -118,6 +122,44 @@ def rate_limited_client(monkeypatch):
     return TestClient(app)
 
 
+@pytest.fixture
+def unlimited_key_client(monkeypatch):
+    """Return a TestClient where one API key resolves to an unlimited tier."""
+
+    dummy_rate_limit = DummyRateLimitService()
+
+    monkeypatch.setattr(
+        "app.middleware.rate_limit_middleware.RateLimitService",
+        lambda: dummy_rate_limit,
+    )
+
+    async def fake_get_tier_info(self, api_key, request_ip):  # pragma: no cover - small shim
+        if api_key == "frontend-server-key":
+            return {
+                "tier_id": None,
+                "tier_name": "btaa_primary",
+                "display_name": "BTAA Geoportal Frontend",
+                "requests_per_minute": None,
+                "api_key_id": None,
+                "key_hash": "frontend-server-key-hash",
+            }
+
+        return {
+            "tier_id": 1,
+            "tier_name": "anonymous",
+            "display_name": "Anonymous",
+            "requests_per_minute": 1,
+        }
+
+    monkeypatch.setattr(
+        "app.middleware.rate_limit_middleware.RateLimitMiddleware._get_tier_info",
+        fake_get_tier_info,
+    )
+
+    app = _create_app()
+    return TestClient(app)
+
+
 class TestRateLimitMiddlewareIntegration:
     """Integration-style tests for rate limit middleware."""
 
@@ -154,25 +196,30 @@ class TestRateLimitMiddlewareIntegration:
         assert second.status_code == 200
         assert "X-RateLimit-Limit" not in first.headers
 
-    def test_options_preflight_bypasses_rate_limit(self, rate_limited_client):
-        """Preflight requests should not consume the following real request's quota."""
+    def test_documentation_routes_bypass_rate_limit(self, rate_limited_client):
+        """Docs and OpenAPI schema should not consume the interactive API quota."""
 
-        options = rate_limited_client.options("/api/v1/test-endpoint")
-        first_get = rate_limited_client.get("/api/v1/test-endpoint")
-        second_get = rate_limited_client.get("/api/v1/test-endpoint")
+        docs = rate_limited_client.get("/api/docs")
+        schema = rate_limited_client.get("/api/openapi.json")
+        first_api_call = rate_limited_client.get("/api/v1/test-endpoint")
+        second_api_call = rate_limited_client.get("/api/v1/test-endpoint")
 
-        assert options.status_code != 429
-        assert first_get.status_code == 200
-        assert second_get.status_code == 429
+        assert docs.status_code == 200
+        assert schema.status_code == 200
+        assert "X-RateLimit-Limit" not in docs.headers
+        assert "X-RateLimit-Limit" not in schema.headers
+        assert first_api_call.status_code == 200
+        assert second_api_call.status_code == 429
 
-    def test_analytics_events_use_separate_rate_limit_bucket(self, rate_limited_client):
-        """Analytics event ingestion should not consume the normal API request bucket."""
+    def test_unlimited_key_never_returns_429(self, unlimited_key_client):
+        """Unlimited tiers must bypass counters and report unlimited headers."""
 
-        analytics = rate_limited_client.post("/api/v1/analytics/events", json={"events": []})
-        first_get = rate_limited_client.get("/api/v1/test-endpoint")
-        second_get = rate_limited_client.get("/api/v1/test-endpoint")
+        headers = {"X-API-Key": "frontend-server-key"}
 
-        assert analytics.status_code == 202
-        assert analytics.headers["X-RateLimit-Limit"] == "120"
-        assert first_get.status_code == 200
-        assert second_get.status_code == 429
+        first = unlimited_key_client.get("/api/v1/test-endpoint", headers=headers)
+        second = unlimited_key_client.get("/api/v1/test-endpoint", headers=headers)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.headers["X-RateLimit-Limit"] == "unlimited"
+        assert second.headers["X-RateLimit-Remaining"] == "unlimited"

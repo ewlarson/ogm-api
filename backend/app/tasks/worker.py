@@ -57,31 +57,20 @@ THUMBNAIL_MAX_EDGE = int(os.getenv("THUMBNAIL_MAX_EDGE", "512"))
 THUMBNAIL_JPEG_QUALITY = int(os.getenv("THUMBNAIL_JPEG_QUALITY", "78"))
 REMOTE_THUMBNAIL_PREFIX = f"remote-thumb-normalized:{THUMBNAIL_CACHE_VERSION}:"
 
-
-def _optional_env(name: str) -> Optional[str]:
-    value = os.getenv(name)
-    if value is None:
-        return None
-    value = value.strip()
-    return value or None
-
-
-def _build_redis_url(db: int) -> str:
-    host = os.getenv("REDIS_HOST", "redis")
-    port = os.getenv("REDIS_PORT", "6379")
-    password = _optional_env("REDIS_PASSWORD")
-    auth = f":{password}@" if password else ""
-    return f"redis://{auth}{host}:{port}/{db}"
-
-
 # Setup Celery
 broker_url = os.getenv(
     "CELERY_BROKER_URL",
-    _build_redis_url(0),
+    (
+        f"redis://:{os.getenv('REDIS_PASSWORD', '')}"
+        f"@{os.getenv('REDIS_HOST', 'redis')}:{os.getenv('REDIS_PORT', 6379)}/0"
+    ),
 )
 result_backend = os.getenv(
     "CELERY_RESULT_BACKEND",
-    _build_redis_url(1),
+    (
+        f"redis://:{os.getenv('REDIS_PASSWORD', '')}"
+        f"@{os.getenv('REDIS_HOST', 'redis')}:{os.getenv('REDIS_PORT', 6379)}/1"
+    ),
 )
 
 celery_app = Celery("tasks", broker=broker_url, backend=result_backend)
@@ -122,7 +111,7 @@ celery_app.conf.update(
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "redis"),
     port=int(os.getenv("REDIS_PORT", 6379)),
-    password=_optional_env("REDIS_PASSWORD"),
+    password=os.getenv("REDIS_PASSWORD"),
     db=1,  # Use different DB for images
     decode_responses=False,
 )

@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -39,27 +38,6 @@ def create_fast_embeddings_table():
             return
 
         with engine.connect() as conn:
-            fast_embeddings_enabled = (
-                os.getenv("ENABLE_FAST_EMBEDDINGS", "true").strip().lower()
-                not in {"0", "false", "no", "off"}
-            )
-            if not fast_embeddings_enabled:
-                logger.warning(
-                    "Skipping gazetteer_fast_embeddings table creation because "
-                    "ENABLE_FAST_EMBEDDINGS is disabled."
-                )
-                return
-
-            vector_available = conn.execute(
-                text("SELECT 1 FROM pg_available_extensions WHERE name = 'vector'")
-            ).scalar()
-            if not vector_available:
-                logger.warning(
-                    "Skipping gazetteer_fast_embeddings table creation because the "
-                    "database does not provide the vector extension."
-                )
-                return
-
             # First, ensure the vector extension is installed
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
             

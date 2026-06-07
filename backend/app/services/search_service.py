@@ -16,18 +16,85 @@ from app.elasticsearch.client import es
 from app.elasticsearch.search import _normalize_geo_params
 from app.elasticsearch.suggest import normalize_suggestion_text, suggestion_sort_key
 from app.services.citation_service import CitationService
-from app.services.distribution_repository import (
-    build_distribution_context,
-    fetch_distribution_context,
-    fetch_distribution_context_map,
-)
+from app.services.distribution_repository import fetch_distribution_context
 from app.services.download_service import DownloadService
-from app.services.image_service import ImageService
 from app.services.relationship_service import RelationshipService
-from app.services.viewer_service import ViewerService, create_viewer_attributes
+from app.services.viewer_service import ViewerService
 from db.database import database
 
 logger = logging.getLogger(__name__)
+
+
+def _search_error_text(error: object) -> str:
+    """Serialize nested framework/client errors for classification."""
+    if isinstance(error, BaseException):
+        parts = [str(error)]
+        detail = getattr(error, "detail", None)
+        if detail is not None:
+            parts.append(_search_error_text(detail))
+        return " ".join(parts)
+
+    if isinstance(error, dict):
+        try:
+            return json.dumps(sanitize_for_json(error), default=str)
+        except Exception:
+            return str(error)
+
+    return str(error)
+
+
+def _search_error_status(error: object) -> int | None:
+    if isinstance(error, BaseException):
+        status_code = getattr(error, "status_code", None)
+        if isinstance(status_code, int):
+            return status_code
+        detail = getattr(error, "detail", None)
+        if detail is not None:
+            return _search_error_status(detail)
+        return None
+
+    if isinstance(error, dict):
+        for key in ("status_code", "status"):
+            status_code = error.get(key)
+            if isinstance(status_code, int):
+                return status_code
+        for key in ("detail", "info"):
+            nested = error.get(key)
+            if isinstance(nested, dict):
+                nested_status = _search_error_status(nested)
+                if nested_status is not None:
+                    return nested_status
+
+    return None
+
+
+def _search_error_type(error: object) -> str:
+    """Classify search dependency failures for stable caller payloads."""
+    status_code = _search_error_status(error)
+    error_text = _search_error_text(error).lower()
+    connection_terms = (
+        '"status": 503',
+        '"status_code": 503',
+        "'status': 503",
+        "'status_code': 503",
+        "apierror(503",
+        "cannot connect",
+        "connect call failed",
+        "connection",
+        "connection refused",
+        "nodename",
+        "operation not permitted",
+        "service unavailable",
+        "servname",
+        "timed out",
+        "timeout",
+    )
+
+    if status_code == 503 or any(term in error_text for term in connection_terms):
+        return "connection"
+    if "elasticsearch" in error_text:
+        return "elasticsearch"
+    return "unknown"
 
 
 class SearchService:
@@ -49,10 +116,11 @@ class SearchService:
         exclude_filters: Optional[Dict] = None,
         fq_direct: Optional[Dict] = None,
         adv_q: Optional[list] = None,
+        hydrate_hits: bool = True,
+        sanitize_response: bool = True,
     ) -> Dict:
         """Search endpoint with caching support."""
         try:
-            timings = {}
             start_time = time.time()
 
             # Calculate skip from page/limit
@@ -68,35 +136,38 @@ class SearchService:
                     else {}
                 )
 
-            logger.info(
-                f"SearchService.search: include_filters={include_filters}, "
-                f"exclude_filters={exclude_filters}, "
-                f"request_query_params="
-                f"{request_query_params[:200] if request_query_params else None}..."
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "SearchService.search: include_filters=%s, exclude_filters=%s, "
+                    "request_query_params=%s...",
+                    include_filters,
+                    exclude_filters,
+                    request_query_params[:200] if request_query_params else None,
+                )
             if include_filters is None or exclude_filters is None:
-                logger.info(
+                logger.debug(
                     "SearchService.search: Extracting new style filters from request_query_params"
                 )
                 parsed_include, parsed_exclude = self.extract_new_style_filters(
                     request_query_params
                 )
-                logger.info(
-                    f"SearchService.search: Parsed include_filters={parsed_include}, "
-                    f"exclude_filters={parsed_exclude}"
+                logger.debug(
+                    "SearchService.search: Parsed include_filters=%s, exclude_filters=%s",
+                    parsed_include,
+                    parsed_exclude,
                 )
                 include_filters = include_filters if include_filters is not None else parsed_include
                 exclude_filters = exclude_filters if exclude_filters is not None else parsed_exclude
-            logger.info(
-                f"SearchService.search: Final include_filters={include_filters}, "
-                f"exclude_filters={exclude_filters}"
+            logger.debug(
+                "SearchService.search: Final include_filters=%s, exclude_filters=%s",
+                include_filters,
+                exclude_filters,
             )
 
             # Get sort mapping
             sort_mapping = SORT_MAPPINGS.get(sort, None)
 
             # Elasticsearch query
-            es_start = time.time()
             results = await search_resources(
                 query=q,
                 fq=filter_query,
@@ -108,82 +179,41 @@ class SearchService:
                 exclude_filters=exclude_filters,
                 facets=facets,
                 adv_q=adv_q,
+                hydrate_hits=hydrate_hits,
             )
             # Defensive: ensure results is a dict
             if not isinstance(results, dict):
                 results = {}
-            es_time = (time.time() - es_start) * 1000
-            timings["elasticsearch"] = f"{es_time:.0f}ms"
-
-            # Process each resource
-            process_start = time.time()
-            docs_processed = 0
-            citation_time = 0
-            thumbnail_time = 0
-            viewer_time = 0
-
-            resource_ids = [
-                resource.get("id") for resource in results.get("data", []) if resource.get("id")
-            ]
-            distribution_contexts = await fetch_distribution_context_map(resource_ids)
-
-            for resource in results.get("data", []):
-                resource_id = resource.get("id")
-                distribution_context = distribution_contexts.get(
-                    resource_id, build_distribution_context(resource_id or "", [])
-                )
-
-                # Add thumbnail URL
-                thumb_start = time.time()
-                image_service = ImageService(
-                    resource["attributes"], distribution_context=distribution_context
-                )
-                resource["attributes"]["ui_thumbnail_url"] = image_service.get_thumbnail_url()
-                thumbnail_time += time.time() - thumb_start
-
-                # Add citation
-                cite_start = time.time()
-                citation_service = CitationService(
-                    resource["attributes"], distribution_context=distribution_context
-                )
-                resource["attributes"]["ui_citation"] = citation_service.get_citation()
-                citation_time += time.time() - cite_start
-
-                # Add viewer attributes
-                viewer_start = time.time()
-                viewer_attrs = create_viewer_attributes(
-                    resource["attributes"], distribution_context=distribution_context
-                )
-                resource["attributes"].update(viewer_attrs)
-                viewer_time += time.time() - viewer_start
-
-                docs_processed += 1
-
-            process_time = time.time() - process_start
-            timings["resourceProcessing"] = {
-                "total": f"{(process_time * 1000):.0f}ms",
-                "perResource": (
-                    f"{((process_time / docs_processed) * 1000):.0f}ms"
-                    if docs_processed > 0
-                    else "0ms"
-                ),
-                "thumbnailService": f"{(thumbnail_time * 1000):.0f}ms",
-                "citationService": f"{(citation_time * 1000):.0f}ms",
-                "viewerService": f"{(viewer_time * 1000):.0f}ms",
-            }
+            if "error" in results:
+                results.setdefault("message", "Search operation failed")
+                results.setdefault("error_type", _search_error_type(results))
 
             total_time = time.time() - start_time
-            timings["totalResponseTime"] = f"{(total_time * 1000):.0f}ms"
-
-            results["queryTime"] = timings
+            query_timings = results.get("queryTime", {})
+            if not isinstance(query_timings, dict):
+                query_timings = {}
+            query_timings.setdefault(
+                "resourceProcessing",
+                {
+                    "total": "0ms",
+                    "perResource": "0ms",
+                    "thumbnailService": "0ms",
+                    "citationService": "0ms",
+                    "viewerService": "0ms",
+                },
+            )
+            query_timings["totalResponseTime"] = f"{(total_time * 1000):.0f}ms"
+            results["queryTime"] = query_timings
 
             # Extract and add suggestions to meta if they exist
             if isinstance(results, dict) and "meta" in results and "suggestions" in results["meta"]:
                 results["meta"]["spellingSuggestions"] = results["meta"].pop("suggestions")
 
             # Sanitize the entire results object for JSON
-            sanitized_results = sanitize_for_json(results)
+            if not sanitize_response:
+                return results
 
+            sanitized_results = sanitize_for_json(results)
             return sanitized_results
 
         except Exception as e:
@@ -191,6 +221,7 @@ class SearchService:
             return {
                 "message": "Search operation failed",
                 "error": str(e),
+                "error_type": _search_error_type(e),
                 "query": q,
                 "filters": filter_query if "filter_query" in locals() else None,
                 "sort": sort,
@@ -214,7 +245,10 @@ class SearchService:
                 raise HTTPException(status_code=404, detail="Resource not found") from None
             except Exception as e:
                 logger.error("Elasticsearch error getting resource %s", id, exc_info=True)
-                raise HTTPException(status_code=500, detail=str(e)) from e
+                detail = str(e)
+                if _search_error_type(e) == "connection":
+                    detail = f"Elasticsearch connection/unavailable error: {detail}"
+                raise HTTPException(status_code=500, detail=detail) from e
 
             source_data = result["_source"]
             references = source_data.get("dct_references_s")
@@ -386,13 +420,14 @@ class SearchService:
             "resource_type_agg": "gbl_resourceType_sm",
             "resource_class_agg": "gbl_resourceClass_sm",
             "index_year_agg": "gbl_indexYear_im",
-            "language_agg": "dct_language_sm",
+            "language_agg": "b1g_language_sm",
             "creator_agg": "dct_creator_sm",
             "publisher_agg": "dct_publisher_sm",
             "provider_agg": "schema_provider_s",
             "b1g_code_agg": "b1g_code_s",
             "access_rights_agg": "dct_accessRights_s",
             "georeferenced_agg": "gbl_georeferenced_b",
+            "map_overlay_agg": "b1g_georeferenced_allmaps_b",
             # Spatial facet fields
             "geo_country_agg": "geo_country",
             "geo_region_agg": "geo_region",
@@ -442,10 +477,11 @@ class SearchService:
         include_filters: Dict[str, list] = {}
         exclude_filters: Dict[str, list] = {}
         if not params:
-            logger.info("extract_new_style_filters: No params provided")
+            logger.debug("extract_new_style_filters: No params provided")
             return include_filters, exclude_filters
-        logger.info(
-            f"extract_new_style_filters: Parsing params: {params[:200] if params else 'None'}..."
+        logger.debug(
+            "extract_new_style_filters: Parsing params: %s...",
+            params[:200] if params else "None",
         )
         # parse_qs expects a URL-decoded query string
         # If params is URL-encoded (contains %5B for [), decode it first
@@ -454,16 +490,24 @@ class SearchService:
         if params and "%5B" in params:
             # URL-encoded brackets detected, decode first
             decoded_params = unquote(params)
-            logger.info(f"extract_new_style_filters: Decoded params sample: {decoded_params[:200]}")
+            logger.debug(
+                "extract_new_style_filters: Decoded params sample: %s",
+                decoded_params[:200],
+            )
             raw_params = parse_qs(decoded_params)
         elif isinstance(params, str):
             raw_params = parse_qs(params)
         else:
             raw_params = parse_qs(str(params))
-        logger.info(f"extract_new_style_filters: Found {len(raw_params)} raw params")
-        geo_keys = [k for k in raw_params.keys() if "geo" in k.lower()]
-        logger.info(f"extract_new_style_filters: Geo-related keys: {geo_keys}")
-        logger.info(f"extract_new_style_filters: All keys sample: {list(raw_params.keys())[:10]}")
+        geo_keys: list[str] = []
+        if logger.isEnabledFor(logging.DEBUG):
+            geo_keys = [k for k in raw_params.keys() if "geo" in k.lower()]
+            logger.debug("extract_new_style_filters: Found %s raw params", len(raw_params))
+            logger.debug("extract_new_style_filters: Geo-related keys: %s", geo_keys)
+            logger.debug(
+                "extract_new_style_filters: All keys sample: %s",
+                list(raw_params.keys())[:10],
+            )
 
         # Convenience filters (non-bracket style) for common client use cases.
         # Example: ogm_repo[]=edu.stanford.purl&ogm_repo[]=edu.umn
@@ -545,7 +589,7 @@ class SearchService:
                         # So we store it as a flat key that will be processed by normalization
                         geo_filters[geo_param] = values[0] if values else None
                         value_str = values[0] if values else None
-                        logger.info(f"  Added points param (raw): {geo_param} = {value_str}")
+                        logger.debug("Added points param (raw): %s = %s", geo_param, value_str)
                         continue
 
                     # This is a nested parameter like "top_left][lat]" or "top_left[lat]"
@@ -558,9 +602,11 @@ class SearchService:
                             if parent_key not in geo_filters:
                                 geo_filters[parent_key] = {}
                             geo_filters[parent_key][child_key] = values[0] if values else None
-                            logger.info(
-                                f"  Added nested param: {parent_key}[{child_key}] = "
-                                f"{values[0] if values else None}"
+                            logger.debug(
+                                "Added nested param: %s[%s] = %s",
+                                parent_key,
+                                child_key,
+                                values[0] if values else None,
                             )
                     else:
                         # Format: "top_left[lat]"
@@ -569,28 +615,34 @@ class SearchService:
                         if parent_key not in geo_filters:
                             geo_filters[parent_key] = {}
                         geo_filters[parent_key][child_key] = values[0] if values else None
-                        logger.info(
-                            f"  Added nested param: {parent_key}[{child_key}] = "
-                            f"{values[0] if values else None}"
+                        logger.debug(
+                            "Added nested param: %s[%s] = %s",
+                            parent_key,
+                            child_key,
+                            values[0] if values else None,
                         )
                 else:
                     # For simple parameters, use the first value if not already set
                     # This handles duplicate parameters by taking the first occurrence
                     if geo_param not in geo_filters:
                         geo_filters[geo_param] = values[0] if values else None
-                        logger.info(
-                            f"  Added simple param: {geo_param} = {values[0] if values else None}"
+                        logger.debug(
+                            "Added simple param: %s = %s",
+                            geo_param,
+                            values[0] if values else None,
                         )
 
         # If we have geospatial filters, add them to include_filters
         if geo_filters:
-            logger.info(f"Raw geo_filters before normalization: {geo_filters}")
+            logger.debug("Raw geo_filters before normalization: %s", geo_filters)
             normalized_geo = _normalize_geo_params(geo_filters)
-            logger.info(f"Normalized geo_filters: {normalized_geo}")
+            logger.debug("Normalized geo_filters: %s", normalized_geo)
             include_filters["geo"] = normalized_geo
         else:
-            logger.warning(
-                f"No geo_filters found! Processed {len(raw_params)} params, geo_keys: {geo_keys}"
+            logger.debug(
+                "No geo_filters found. Processed %s params, geo_keys: %s",
+                len(raw_params),
+                geo_keys,
             )
 
         # Handle year_range filters
