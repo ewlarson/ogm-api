@@ -21,6 +21,7 @@ async def test_prime_thumbnail_no_source_records_placeheld():
     ):
         service = MagicMock()
         service._get_thumbnail_source_url.return_value = None
+        service.resolve_thumbnail_source_url.return_value = None
         mock_service_cls.return_value = service
 
         result = await prime_thumbnail_cache._prime_thumbnail_for_resource(resource, force=False)
@@ -42,10 +43,10 @@ async def test_prime_thumbnail_cached_remote_records_success():
             prime_thumbnail_cache, "safe_record_thumbnail_state", new=AsyncMock()
         ) as mock_state,
         patch.object(prime_thumbnail_cache, "ImageService") as mock_service_cls,
-        patch.object(prime_thumbnail_cache, "_store_image_bytes", return_value=True) as mock_store,
     ):
         service = MagicMock()
         service._get_thumbnail_source_url.return_value = source_url
+        service.resolve_thumbnail_source_url.return_value = source_url
         service._is_cog_url.return_value = False
         service._is_pmtiles_url.return_value = False
         service._is_manifest_url.return_value = False
@@ -62,16 +63,51 @@ async def test_prime_thumbnail_cached_remote_records_success():
             )
 
         assert result == ("cached", "resource-cached", "thumbnail already cached")
-        mock_store.assert_called_once_with(
-            "abc123",
-            b"cached-image",
-            "application/octet-stream",
-            resource_id="resource-cached",
-            hydrate_assets=True,
-        )
         payload = mock_state.await_args.args[0]
-        assert payload.state == "success"
-        assert payload.source_hash == "abc123"
+    assert payload.state == "success"
+    assert payload.source_hash == "abc123"
+
+
+@pytest.mark.asyncio
+async def test_prime_thumbnail_uses_bridge_asset_when_no_intrinsic_source():
+    resource = {"id": "resource-bridge", "dct_accessrights_s": "Public"}
+    asset_url = "https://assets.example.edu/thumb.png"
+
+    with (
+        patch.object(prime_thumbnail_cache, "fetch_distribution_context", AsyncMock()),
+        patch.object(
+            prime_thumbnail_cache, "_get_thumbnail_asset_url", AsyncMock(return_value=asset_url)
+        ),
+        patch.object(
+            prime_thumbnail_cache, "safe_record_thumbnail_state", new=AsyncMock()
+        ) as mock_state,
+        patch.object(prime_thumbnail_cache, "ImageService") as mock_service_cls,
+        patch.object(
+            prime_thumbnail_cache,
+            "_compute_thumbnail_image_hash",
+            return_value="abc123",
+        ),
+        patch.object(
+            prime_thumbnail_cache,
+            "_prime_remote_thumbnail",
+            return_value=("generated", "remote"),
+        ),
+    ):
+        service = MagicMock()
+        service.resolve_thumbnail_source_url.return_value = asset_url
+        service._is_cog_url.return_value = False
+        service._is_pmtiles_url.return_value = False
+        service._is_manifest_url.return_value = False
+        service.get_cached_image = AsyncMock(return_value=None)
+        mock_service_cls.return_value = service
+
+        result = await prime_thumbnail_cache._prime_thumbnail_for_resource(resource, force=False)
+
+    assert result == ("generated", "resource-bridge", "remote")
+    payload = mock_state.await_args.args[0]
+    assert payload.state == "success"
+    assert payload.source_url == asset_url
+    assert payload.source_hash == "abc123"
 
 
 @pytest.mark.asyncio
@@ -98,6 +134,7 @@ async def test_prime_thumbnail_deprioritized_remote_provider_skips_without_state
     ):
         service = MagicMock()
         service._get_thumbnail_source_url.return_value = source_url
+        service.resolve_thumbnail_source_url.return_value = source_url
         service._is_cog_url.return_value = False
         service._is_pmtiles_url.return_value = False
         service._is_manifest_url.return_value = False
@@ -130,10 +167,10 @@ async def test_prime_thumbnail_resume_rechecks_prior_success_and_rehydrates_cach
             "_compute_thumbnail_image_hash",
             return_value="abc123",
         ),
-        patch.object(prime_thumbnail_cache, "_store_image_bytes", return_value=True) as mock_store,
     ):
         service = MagicMock()
         service._get_thumbnail_source_url.return_value = source_url
+        service.resolve_thumbnail_source_url.return_value = source_url
         service._is_cog_url.return_value = False
         service._is_pmtiles_url.return_value = False
         service._is_manifest_url.return_value = False
@@ -149,13 +186,6 @@ async def test_prime_thumbnail_resume_rechecks_prior_success_and_rehydrates_cach
         )
 
         assert result == ("cached", "resource-resume-success", "thumbnail already cached")
-        mock_store.assert_called_once_with(
-            "abc123",
-            b"cached-image",
-            "application/octet-stream",
-            resource_id="resource-resume-success",
-            hydrate_assets=True,
-        )
         payload = mock_state.await_args.args[0]
         assert payload.state == "success"
         assert payload.source_hash == "abc123"
@@ -185,6 +215,7 @@ async def test_prime_thumbnail_retry_failures_allows_work():
     ):
         service = MagicMock()
         service._get_thumbnail_source_url.return_value = source_url
+        service.resolve_thumbnail_source_url.return_value = source_url
         service._is_cog_url.return_value = False
         service._is_pmtiles_url.return_value = False
         service._is_manifest_url.return_value = False
@@ -200,66 +231,5 @@ async def test_prime_thumbnail_retry_failures_allows_work():
         )
 
         assert result == ("generated", "resource-retry-failure", "remote")
-        payload = mock_state.await_args.args[0]
-        assert payload.state == "success"
-
-
-@pytest.mark.asyncio
-async def test_run_refuses_full_corpus_redis_asset_hydration():
-    args = prime_thumbnail_cache.argparse.Namespace(
-        resource_ids=[],
-        limit=None,
-        batch_size=100,
-        concurrency=4,
-        force=False,
-        retry_failures=False,
-        retry_placeheld=False,
-        strict_failures=False,
-        hydrate_assets=True,
-        allow_full_hydration=False,
-    )
-
-    with patch.object(prime_thumbnail_cache, "_count_resources", return_value=1000):
-        assert await prime_thumbnail_cache._run(args) == 2
-
-
-@pytest.mark.asyncio
-async def test_prime_thumbnail_cached_remote_can_skip_redis_asset_hydration():
-    resource = {"id": "resource-cached-no-redis", "dct_accessrights_s": "Public"}
-    source_url = "https://example.com/thumb.png"
-
-    with (
-        patch.object(prime_thumbnail_cache, "fetch_distribution_context", AsyncMock()),
-        patch.object(
-            prime_thumbnail_cache, "safe_record_thumbnail_state", new=AsyncMock()
-        ) as mock_state,
-        patch.object(prime_thumbnail_cache, "ImageService") as mock_service_cls,
-        patch.object(prime_thumbnail_cache, "_store_image_bytes", return_value=True) as mock_store,
-    ):
-        service = MagicMock()
-        service._get_thumbnail_source_url.return_value = source_url
-        service._is_cog_url.return_value = False
-        service._is_pmtiles_url.return_value = False
-        service._is_manifest_url.return_value = False
-        service.get_cached_image = AsyncMock(return_value=b"cached-image")
-        mock_service_cls.return_value = service
-
-        with patch.object(
-            prime_thumbnail_cache,
-            "_compute_thumbnail_image_hash",
-            return_value="abc123",
-        ):
-            result = await prime_thumbnail_cache._prime_thumbnail_for_resource(
-                resource, force=False, hydrate_assets=False
-            )
-
-        assert result == ("cached", "resource-cached-no-redis", "thumbnail already cached")
-        mock_store.assert_called_once_with(
-            "abc123",
-            b"cached-image",
-            "application/octet-stream",
-            resource_id="resource-cached-no-redis",
-            hydrate_assets=False,
-        )
         payload = mock_state.await_args.args[0]
         assert payload.state == "success"

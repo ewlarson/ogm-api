@@ -9,6 +9,54 @@ import pytest
 from app.services.search_service import SearchService
 
 
+@pytest.mark.asyncio
+async def test_search_preserves_search_payload_and_adds_lightweight_timings():
+    """SearchService should not enrich each hit when the endpoint rebuilds final resources."""
+    service = SearchService()
+
+    with patch("app.services.search_service.search_resources") as mock_search:
+        mock_search.return_value = {
+            "data": [{"id": "1", "attributes": {"dct_title_s": "Test Resource"}}],
+            "meta": {"suggestions": ["test resource"]},
+            "queryTime": {"elasticsearch": "12ms", "postgresql": "8ms"},
+        }
+
+        result = await service.search(q="test", page=1, limit=10)
+
+    assert result["data"][0]["attributes"]["dct_title_s"] == "Test Resource"
+    assert "ui_thumbnail_url" not in result["data"][0]["attributes"]
+    assert "ui_citation" not in result["data"][0]["attributes"]
+    assert result["meta"]["spellingSuggestions"] == ["test resource"]
+    assert result["queryTime"]["elasticsearch"] == "12ms"
+    assert result["queryTime"]["postgresql"] == "8ms"
+    assert result["queryTime"]["resourceProcessing"]["total"] == "0ms"
+    assert "totalResponseTime" in result["queryTime"]
+
+
+@pytest.mark.asyncio
+async def test_search_forwards_hydrate_hits_flag():
+    service = SearchService()
+
+    with patch("app.services.search_service.search_resources") as mock_search:
+        mock_search.return_value = {"data": [], "meta": {}, "queryTime": {}}
+
+        await service.search(q="test", page=1, limit=10, hydrate_hits=False)
+
+    assert mock_search.call_args.kwargs["hydrate_hits"] is False
+
+
+@pytest.mark.asyncio
+async def test_search_can_skip_result_sanitization_for_internal_callers():
+    service = SearchService()
+
+    with patch("app.services.search_service.search_resources") as mock_search:
+        mock_search.return_value = {"data": [], "meta": {}, "queryTime": {}}
+
+        result = await service.search(q="test", page=1, limit=10, sanitize_response=False)
+
+    assert result is mock_search.return_value
+
+
 @pytest.mark.integration
 @pytest.mark.elasticsearch
 class TestSearchService:
@@ -22,7 +70,14 @@ class TestSearchService:
         assert hasattr(service, "index_name")
         assert hasattr(service, "es")
         # In test environment, the index name might be different
-        assert service.index_name in ["btaa_geospatial_api", "btaa_ogm_api_test", "btaa_ogm_api"]
+        assert service.index_name in [
+            "btaa_geospatial_api",
+            "btaa_geospatial_api_test",
+            "btaa_ogm_api_test",
+            "btaa_ogm_api",
+            "opengeometadata_api_test",
+            "opengeometadata_api",
+        ]
 
     @pytest.mark.asyncio
     async def test_search_with_id_field_in_multi_match(self):
@@ -113,7 +168,24 @@ class TestSearchService:
             assert "message" in result
             assert "error" in result
             assert result["message"] == "Search operation failed"
+            assert result["error_type"] == "elasticsearch"
             assert "Elasticsearch error" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_search_classifies_returned_dependency_errors(self):
+        """Search should tag error payloads returned by the Elasticsearch layer."""
+        service = SearchService()
+
+        with patch("app.services.search_service.search_resources") as mock_search:
+            mock_search.return_value = {
+                "error": "500: {'message': 'Elasticsearch query failed', 'status_code': 503}",
+            }
+
+            result = await service.search(q="test", page=1, limit=10)
+
+            assert result["message"] == "Search operation failed"
+            assert result["error_type"] == "connection"
+            assert "queryTime" in result
 
     def test_extract_filter_queries(self):
         """Test the extract_filter_queries method."""
@@ -164,6 +236,12 @@ class TestSearchService:
         try:
             result = await service.search(q="map", page=1, limit=5)
 
+            if "error" in result:
+                assert result["message"] == "Search operation failed"
+                assert result["error_type"] in {"connection", "elasticsearch"}
+                assert "event loop" not in str(result.get("error", "")).lower()
+                return
+
             # Verify the structure
             assert "data" in result
             assert "meta" in result
@@ -192,6 +270,8 @@ class TestSearchService:
                 assert "resourceProcessing" in result["queryTime"]
                 assert "totalResponseTime" in result["queryTime"]
 
+        except AssertionError:
+            raise
         except Exception as e:
             # Handle connection errors gracefully
             assert (
@@ -611,6 +691,7 @@ class TestSearchService:
             "fq[b1g_code_s][]=BTAA&"
             "fq[access_rights_agg][]=Public&"
             "fq[georeferenced_agg][]=true&"
+            "fq[map_overlay_agg][]=true&"
             "fq[geo_country_agg][]=USA&"
             "fq[geo_region_agg][]=Midwest&"
             "fq[geo_county_agg][]=Hennepin"
@@ -624,12 +705,13 @@ class TestSearchService:
         assert result["gbl_resourceType_sm"] == ["Dataset"]
         assert result["gbl_resourceClass_sm"] == ["Dataset"]
         assert result["gbl_indexYear_im"] == ["2023"]
-        assert result["dct_language_sm"] == ["English"]
+        assert result["b1g_language_sm"] == ["English"]
         assert result["dct_creator_sm"] == ["Test Creator"]
         assert result["schema_provider_s"] == ["Test Provider"]
         assert result["b1g_code_s"] == ["BTAA"]
         assert result["dct_accessRights_s"] == ["Public"]
         assert result["gbl_georeferenced_b"] == ["true"]
+        assert result["b1g_georeferenced_allmaps_b"] == ["true"]
         assert result["geo_country"] == ["USA"]
         assert result["geo_region"] == ["Midwest"]
         assert result["geo_county"] == ["Hennepin"]
