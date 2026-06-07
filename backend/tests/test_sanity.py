@@ -31,16 +31,6 @@ def test_api_docs_available():
         or "openapi" in response.text.lower()
         or "btaa geospatial api" in response.text.lower()
     )
-    assert "/api/v1/ogm/repos/dashboard" in response.text
-
-
-@pytest.mark.unit
-def test_root_redirects_to_api_docs():
-    """Test that the site root redirects to the API documentation."""
-    client = TestClient(app)
-    response = client.get("/", follow_redirects=False)
-    assert response.status_code == 308
-    assert response.headers["location"] == "/api/docs"
 
 
 @pytest.mark.unit

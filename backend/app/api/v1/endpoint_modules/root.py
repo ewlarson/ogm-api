@@ -3,28 +3,31 @@ import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from app.api.errors import PUBLIC_ERROR_RESPONSES
+from app.api.schemas import APIRootResponse
 from app.api.v1.utils import create_jsonapi_response
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(responses=PUBLIC_ERROR_RESPONSES)
 
 
-@router.get("/")
+@router.get("/", response_model=APIRootResponse)
 async def api_root(request: Request):
     """Return basic API information including version."""
     api_info = {
         "type": "api_info",
         "id": "root",
         "attributes": {
-            "api": "OpenGeoMetadata API",
-            "version": "0.6.0",
+            "api": "BTAA Geospatial API",
+            "version": "0.7.0",
             "description": (
-                "A RESTful API for searching and retrieving OpenGeoMetadata resources, "
-                "including harvested repository records and derived metadata services."
+                "A RESTful API that provides access to digitized maps and geospatial data "
+                "resources curated by Big Ten Academic Alliance member libraries."
             ),
             "endpoints": [
                 "/api/v1/",
+                "/api/v1/feedback",
                 "/api/v1/home/blog-posts",
                 "/api/v1/search",
                 "/api/v1/search/facets/{facet_name}",

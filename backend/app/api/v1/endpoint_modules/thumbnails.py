@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from PIL import Image
 
+from app.api.errors import PUBLIC_ERROR_RESPONSES
 from app.services.cache_service import (
     alias_redirect_cache_control_header,
     cache_control_header,
@@ -13,34 +14,30 @@ from app.services.cache_service import (
     weak_etag_from_body,
 )
 from app.services.image_service import ImageService
-from app.services.thumbnail_alias_service import is_thumbnail_hash, thumbnail_alias_service
-from app.services.thumbnail_state_service import ThumbnailState, thumbnail_state_service
+from app.services.thumbnail_alias_service import is_thumbnail_hash
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(responses=PUBLIC_ERROR_RESPONSES)
 
 ASSET_CACHE_TTL_SECONDS = int(os.getenv("ASSET_CACHE_TTL_SECONDS", "3600"))
 
 
 async def _get_resource_alias_redirect(resource_id: str) -> Response | None:
-    """Redirect resource-id requests to a hot immutable asset when possible."""
-    image_hash = await thumbnail_alias_service.get_hash(resource_id)
+    """Redirect resource-id requests to a current hot immutable asset when possible."""
+    from app.api.v1.endpoint_modules.resources.thumbnail import (
+        _current_hot_thumbnail_hash_for_resource,
+    )
+
+    try:
+        image_hash = await _current_hot_thumbnail_hash_for_resource(resource_id)
+    except Exception as exc:
+        logger.debug("Unable to resolve thumbnail alias for %s: %s", resource_id, exc)
+        return None
     if not image_hash:
-        state = await thumbnail_state_service.get_state(resource_id)
-        if not state:
-            return None
-
-        state_hash = state.get("source_hash")
-        if (
-            state.get("state") != ThumbnailState.SUCCESS
-            or not state_hash
-            or not is_thumbnail_hash(str(state_hash))
-        ):
-            return None
-
-        image_hash = str(state_hash)
-        await thumbnail_alias_service.set_hash(resource_id, image_hash)
+        return None
+    if not await _thumbnail_hash_has_cached_image(image_hash):
+        return None
 
     return Response(
         status_code=302,
@@ -49,6 +46,17 @@ async def _get_resource_alias_redirect(resource_id: str) -> Response | None:
             "Cache-Control": alias_redirect_cache_control_header(),
         },
     )
+
+
+async def _thumbnail_hash_has_cached_image(image_hash: str) -> bool:
+    """Return True only when an immutable thumbnail hash resolves to image bytes."""
+    if not is_thumbnail_hash(image_hash):
+        return False
+    try:
+        return await ImageService({}).has_cached_image(image_hash)
+    except Exception as exc:
+        logger.debug("Failed checking thumbnail hash %s: %s", image_hash, exc)
+        return False
 
 
 def _detect_image_type(image_data: bytes) -> str:
@@ -113,21 +121,18 @@ def _detect_image_type(image_data: bytes) -> str:
     return "image/jpeg"
 
 
-@router.get("/thumbnails/placeholder")
+@router.get("/thumbnails/placeholder", response_class=Response)
 async def get_placeholder_thumbnail():
-    """Serve a placeholder thumbnail image for resources that don't have cached thumbnails yet."""
-    # Create a simple SVG placeholder image
+    """Serve a neutral thumbnail placeholder image."""
     placeholder_svg = """
-    <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-        <rect width="200" height="200" fill="#f0f0f0" stroke="#cccccc" stroke-width="1"/>
-        <text x="100" y="100" font-family="Arial, sans-serif" font-size="14" 
-              text-anchor="middle" fill="#666666">
-            Thumbnail
-        </text>
-        <text x="100" y="120" font-family="Arial, sans-serif" font-size="12" 
-              text-anchor="middle" fill="#999999">
-            Processing...
-        </text>
+    <svg width="200" height="200" viewBox="0 0 200 200"
+         xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="Thumbnail placeholder">
+        <title>Thumbnail placeholder</title>
+        <rect width="200" height="200" fill="#f8fafc" stroke="#e5e7eb" stroke-width="1"/>
+        <rect x="54" y="58" width="92" height="84" rx="8" fill="#e2e8f0"/>
+        <path d="M68 122L88 96L104 114L116 100L134 122H68Z" fill="#94a3b8"/>
+        <circle cx="122" cy="82" r="10" fill="#94a3b8"/>
     </svg>
     """.strip()
 
@@ -142,9 +147,9 @@ async def get_placeholder_thumbnail():
     )
 
 
-@router.get("/thumbnails/{resource_id}")
+@router.get("/thumbnails/{resource_id}", response_class=Response)
 async def get_thumbnail(resource_id: str, request: Request):
-    """Serve a resource thumbnail asset with a guaranteed image fallback."""
+    """Serve a thumbnail asset or resolve a resource-id thumbnail fallback."""
     if not is_thumbnail_hash(resource_id):
         redirect = await _get_resource_alias_redirect(resource_id)
         if redirect is not None:
@@ -156,11 +161,11 @@ async def get_thumbnail(resource_id: str, request: Request):
         image_data = await image_service.get_cached_image(resource_id)
     except Exception as e:
         logger.error(f"Error retrieving cached image {resource_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Failed to retrieve thumbnail") from e
 
     if not image_data:
         if is_thumbnail_hash(resource_id):
-            raise HTTPException(status_code=404, detail="Thumbnail asset not found")
+            return Response(status_code=404, headers={"Cache-Control": "no-store"})
 
         from app.api.v1.endpoint_modules.resources.thumbnail import (
             _get_resource_thumbnail_response,
@@ -177,7 +182,7 @@ async def get_thumbnail(resource_id: str, request: Request):
             raise
         except Exception as e:
             logger.error(f"Error retrieving resource thumbnail asset {resource_id}: {e}")
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(status_code=500, detail="Failed to retrieve thumbnail") from e
 
     # Validate that the cached content is actually an image
     try:
