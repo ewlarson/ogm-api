@@ -17,6 +17,14 @@ servers:
     hosts:
       - ogm.geo4lib.app
     cmd: bash -lc "cd /app/backend && exec celery -A app.tasks.worker worker -E --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --prefetch-multiplier=1"
+  cron:
+    hosts:
+      - ogm.geo4lib.app
+    cmd: bash -lc "/app/scripts/start_cron.sh"
+    options:
+      cpus: 0.25
+      memory: 256m
+      user: root
 
 proxy:
   ssl: true
@@ -54,7 +62,11 @@ env:
     APPLICATION_URL:       https://ogm.geo4lib.app
     OPENGEOMETADATA_API_BASE_URL: https://ogm.geo4lib.app
     PYTHONPATH:            /app/backend
+    PYTHON_BIN:            /usr/local/bin/python
     IS_DOCKER:             "true"
+    CRON_LOCAL_TIMEZONE:   America/Chicago
+    OGM_TRIGGER:           nightly
+    OGM_NIGHTLY_CRON_ENABLED: "false"
 
   secret:
     - ADMIN_USERNAME
