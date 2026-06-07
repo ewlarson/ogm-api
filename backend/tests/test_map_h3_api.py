@@ -5,10 +5,12 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import app.services.cache_service as cache_service
 from app.api.v1.endpoint_modules.map import router as map_router
 
 
 def _make_app():
+    cache_service.ENDPOINT_CACHE = False
     app = FastAPI()
     app.include_router(map_router, prefix="/api/v1")
     return app

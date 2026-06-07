@@ -1,6 +1,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +10,18 @@ from app.main import app
 from app.services.relationship_service import RelationshipService
 
 client = TestClient(app)
+
+
+def assert_public_error(data, *, status: int, code: str, detail: str | None = None):
+    assert "errors" in data
+    assert len(data["errors"]) == 1
+
+    error = data["errors"][0]
+    assert error["status"] == status
+    assert error["code"] == code
+    assert "request_id" in error
+    if detail is not None:
+        assert error["detail"] == detail
 
 
 @pytest.mark.unit
@@ -105,42 +118,57 @@ def test_viewer_endpoint_structure():
 @pytest.mark.database
 def test_ogm_endpoint_404_handling():
     """Test that the metadata endpoint returns 404 for non-existent resources."""
-    # Test with a non-existent resource ID
-    response = client.get("/api/v1/resources/non-existent-id/metadata")
+    mock_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.fetchone.return_value = None
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
 
-    # Should return 404 or 500 (if database connection fails in test environment)
-    assert response.status_code in [404, 500]
+    missing_resource_id = f"missing-resource-{uuid4()}"
+    with patch(
+        "app.api.v1.endpoint_modules.resources.metadata.get_async_session",
+        return_value=mock_session,
+    ):
+        response = client.get(f"/api/v1/resources/{missing_resource_id}/metadata")
 
-    if response.status_code == 404:
-        data = response.json()
-        # The endpoint may return {"error": "..."}, {"message": "..."}, or {"detail": "..."} format
-        assert "error" in data or "message" in data or "detail" in data
-        if "error" in data:
-            assert data["error"] == "Resource not found"
-        elif "detail" in data:
-            assert data["detail"] == "Resource not found"
-    elif response.status_code == 500:
-        # Database connection issues are acceptable in test environment
-        data = response.json()
-        assert "error" in data or "detail" in data
+    assert response.status_code == 404
+
+    data = response.json()
+    assert_public_error(
+        data,
+        status=404,
+        code="not_found",
+        detail="Resource not found",
+    )
 
 
 def test_viewer_endpoint_404_handling():
     """Test that the viewer endpoint returns 404 for non-existent resources."""
     # Test with a non-existent resource ID
-    response = client.get("/api/v1/resources/non-existent-id/viewer")
+    missing_resource_id = f"missing-resource-{uuid4()}"
+    response = client.get(f"/api/v1/resources/{missing_resource_id}/viewer")
 
     # Should return 404 or 500 (if database connection fails in test environment)
     assert response.status_code in [404, 500]
 
     if response.status_code == 404:
         data = response.json()
-        assert "detail" in data
-        assert data["detail"] == "Resource not found"
+        assert_public_error(
+            data,
+            status=404,
+            code="not_found",
+            detail="Resource not found",
+        )
     elif response.status_code == 500:
         # Database connection issues are acceptable in test environment
         data = response.json()
-        assert "error" in data
+        assert_public_error(
+            data,
+            status=500,
+            code="internal_server_error",
+            detail="An unexpected error occurred.",
+        )
 
 
 def test_ogm_endpoint_success_response():
@@ -641,10 +669,14 @@ class TestResourceEndpointsEnhanced:
     @patch("app.api.v1.utils.add_thumbnail_url")
     @patch("app.api.v1.utils.serialize_resource_data_dictionaries")
     @patch("app.api.v1.utils.fetch_resource_data_dictionaries", new_callable=AsyncMock)
+    @patch("app.api.v1.utils.serialize_resource_licensed_accesses")
+    @patch("app.api.v1.utils.fetch_resource_licensed_accesses", new_callable=AsyncMock)
     @patch("app.api.v1.endpoint_modules.resources.async_session")
     def test_get_resource_includes_json_safe_data_dictionaries(
         self,
         mock_session,
+        mock_fetch_resource_licensed_accesses,
+        mock_serialize_resource_licensed_accesses,
         mock_fetch_resource_data_dictionaries,
         mock_serialize_resource_data_dictionaries,
         mock_add_thumbnail_url,
@@ -711,17 +743,29 @@ class TestResourceEndpointsEnhanced:
                 ],
             }
         ]
+        mock_fetch_resource_licensed_accesses.return_value = [object()]
+        mock_serialize_resource_licensed_accesses.return_value = [
+            {
+                "institution_code": "01",
+                "institution_name": "Indiana University",
+                "access_url": "https://example.com/iu",
+                "legacy_friendlier_id": "test-resource-dictionaries",
+            }
+        ]
 
         response = client.get("/api/v1/resources/test-resource-dictionaries?cachebust=1")
         assert response.status_code == 200
 
         payload = response.json()
         dictionaries = payload["data"]["attributes"]["b1g"]["data_dictionaries"]
+        licensed_accesses = payload["data"]["meta"]["ui"]["licensed_accesses"]
         assert len(dictionaries) == 1
         assert dictionaries[0]["name"] == "Attributes"
         assert dictionaries[0]["created_at"] == "2026-01-01T00:00:00"
         assert dictionaries[0]["entries"][0]["resource_data_dictionary_id"] == 1
         assert dictionaries[0]["entries"][0]["created_at"] == "2026-01-03T00:00:00"
+        assert licensed_accesses[0]["institution_name"] == "Indiana University"
+        assert licensed_accesses[0]["access_url"] == "https://example.com/iu"
 
     @patch("app.api.v1.endpoint_modules.resources.async_session")
     def test_get_resource_not_found(self, mock_session):
@@ -738,8 +782,12 @@ class TestResourceEndpointsEnhanced:
 
         assert response.status_code == 404
         data = response.json()
-        assert "error" in data
-        assert data["error"] == "Resource not found"
+        assert_public_error(
+            data,
+            status=404,
+            code="not_found",
+            detail="Resource not found",
+        )
 
     @patch("app.services.link_service.LinkService.get_resource_links")
     def test_get_resource_links_success(self, mock_get_links):

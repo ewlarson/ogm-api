@@ -36,13 +36,14 @@ class TestStrongParams:
         assert "fq[dct_spatial_sm][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[gbl_indexYear_im][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[dct_language_sm][]" in SEARCH_ALLOWED_PARAMS
-        assert "fq[dct_language_sm][]" in SEARCH_ALLOWED_PARAMS
+        assert "fq[b1g_language_sm][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[dct_creator_sm][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[dct_publisher_sm][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[schema_provider_s][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[b1g_code_s][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[dct_accessRights_s][]" in SEARCH_ALLOWED_PARAMS
         assert "fq[gbl_georeferenced_b][]" in SEARCH_ALLOWED_PARAMS
+        assert "fq[b1g_georeferenced_allmaps_b][]" in SEARCH_ALLOWED_PARAMS
 
     def test_search_allowed_params_spatial_facets(self):
         """Test that SEARCH_ALLOWED_PARAMS contains spatial facet parameters."""

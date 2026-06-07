@@ -152,7 +152,7 @@ class APIUsageLogService:
                 response_time_ms=response_time_ms,
                 status_code=status_code,
             )
-            write_api_usage_log.apply_async(args=[log_entry], ignore_result=True)
+            write_api_usage_log.delay(log_entry)
         except Exception as e:
             logger.warning("Failed to queue API usage log: %s", e, exc_info=True)
 

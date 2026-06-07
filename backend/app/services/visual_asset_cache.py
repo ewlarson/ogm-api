@@ -3,13 +3,12 @@ import os
 import time
 from typing import Any, Callable, TypeVar
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from db.config import DATABASE_URL
 from db.models import generated_visual_asset_links, generated_visual_assets
+from db.session import sync_engine as app_sync_engine
 
-_engine = None
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
@@ -107,11 +106,7 @@ def durable_visual_asset_enabled() -> bool:
 
 
 def _sync_engine():
-    global _engine
-    if _engine is None:
-        sync_url = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-        _engine = create_engine(sync_url, pool_pre_ping=True)
-    return _engine
+    return app_sync_engine
 
 
 def store_durable_visual_asset(
