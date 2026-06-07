@@ -26,6 +26,14 @@
   --docs-blue-soft: rgba(47, 98, 184, 0.12);
   --docs-red-soft: rgba(207, 63, 50, 0.12);
   --docs-yellow-soft: rgba(246, 217, 77, 0.18);
+  --docs-code-bg: #242424;
+  --docs-code-text: #f2f2f2;
+  --docs-code-muted: #a8a8a8;
+  --docs-code-key: #8ab4ff;
+  --docs-code-string: #7ee787;
+  --docs-code-number: #ffb86c;
+  --docs-code-literal: #d2a8ff;
+  --docs-code-punctuation: #e4e4e4;
   --docs-rule: 2px solid var(--docs-border);
   --docs-radius: 4px;
   --docs-font: "Work Sans", Futura, "Avenir Next", "Helvetica Neue", Arial, sans-serif;
@@ -1023,6 +1031,123 @@ section#footer-app code:hover {
 .swagger-ui .response-col_status {
   color: var(--docs-black);
   font-weight: 900;
+}
+
+.swagger-ui .download-contents {
+  right: 16px;
+  bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--docs-code-text);
+}
+
+.swagger-ui .download-contents:hover,
+.swagger-ui .download-contents:focus {
+  background: var(--docs-yellow);
+  color: var(--docs-black);
+}
+
+.swagger-ui .highlight-code,
+.swagger-ui .request-url,
+.swagger-ui .curl-command,
+.swagger-ui pre.microlight {
+  overflow: auto;
+  border: 0;
+  border-radius: var(--docs-radius);
+  background: var(--docs-code-bg) !important;
+  color: var(--docs-code-text);
+}
+
+.swagger-ui .highlight-code {
+  max-height: min(70vh, 720px);
+}
+
+.swagger-ui .highlight-code pre,
+.swagger-ui .highlight-code code,
+.swagger-ui .highlight-code span,
+.swagger-ui .curl-command pre,
+.swagger-ui .curl-command code,
+.swagger-ui .curl-command span,
+.swagger-ui .request-url pre,
+.swagger-ui .request-url code,
+.swagger-ui .request-url span,
+.swagger-ui pre.microlight code,
+.swagger-ui pre.microlight span {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: inherit;
+  font-family: var(--docs-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  text-shadow: none !important;
+}
+
+.swagger-ui .highlight-code pre,
+.swagger-ui pre.microlight {
+  margin: 0;
+  padding: 18px !important;
+}
+
+.swagger-ui .highlight-code code,
+.swagger-ui pre.microlight code {
+  display: block;
+  min-width: max-content;
+  white-space: pre;
+}
+
+.swagger-ui .highlight-code .hljs-attr,
+.swagger-ui .highlight-code .hljs-attribute,
+.swagger-ui .highlight-code .hljs-keyword,
+.swagger-ui .highlight-code .hljs-name,
+.swagger-ui .highlight-code .token.property,
+.swagger-ui .highlight-code .token.attr-name,
+.swagger-ui pre.microlight .hljs-attr,
+.swagger-ui pre.microlight .hljs-attribute,
+.swagger-ui pre.microlight .hljs-keyword,
+.swagger-ui pre.microlight .hljs-name,
+.swagger-ui pre.microlight .token.property,
+.swagger-ui pre.microlight .token.attr-name {
+  color: var(--docs-code-key) !important;
+}
+
+.swagger-ui .highlight-code .hljs-string,
+.swagger-ui .highlight-code .token.string,
+.swagger-ui pre.microlight .hljs-string,
+.swagger-ui pre.microlight .token.string {
+  color: var(--docs-code-string) !important;
+}
+
+.swagger-ui .highlight-code .hljs-number,
+.swagger-ui .highlight-code .token.number,
+.swagger-ui pre.microlight .hljs-number,
+.swagger-ui pre.microlight .token.number {
+  color: var(--docs-code-number) !important;
+}
+
+.swagger-ui .highlight-code .hljs-literal,
+.swagger-ui .highlight-code .token.boolean,
+.swagger-ui .highlight-code .token.null,
+.swagger-ui pre.microlight .hljs-literal,
+.swagger-ui pre.microlight .token.boolean,
+.swagger-ui pre.microlight .token.null {
+  color: var(--docs-code-literal) !important;
+}
+
+.swagger-ui .highlight-code .hljs-punctuation,
+.swagger-ui .highlight-code .token.punctuation,
+.swagger-ui pre.microlight .hljs-punctuation,
+.swagger-ui pre.microlight .token.punctuation {
+  color: var(--docs-code-punctuation) !important;
+}
+
+.swagger-ui .highlight-code .hljs-comment,
+.swagger-ui .highlight-code .token.comment,
+.swagger-ui pre.microlight .hljs-comment,
+.swagger-ui pre.microlight .token.comment {
+  color: var(--docs-code-muted) !important;
 }
 
 .swagger-ui .model-box,

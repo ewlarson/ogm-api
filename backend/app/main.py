@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 try:
     import appsignal
@@ -11,6 +10,7 @@ except ImportError:
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.docs import (
@@ -33,10 +33,18 @@ except ImportError:
     FastAPIInstrumentor = None  # Optional: requires appsignal/otel stack
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.api.errors import (
+    RequestIDMiddleware,
+    get_request_id,
+    http_exception_handler,
+    internal_server_error_response,
+    validation_exception_handler,
+)
 from app.api.ogc import router as ogc_router
 from app.api.v1.endpoints import router as public_router
 from app.elasticsearch import close_elasticsearch, init_elasticsearch
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
+from app.middleware.turnstile_middleware import TurnstileMiddleware
 from app.services.sitemap_service import (
     SITEMAP_ROOT_NAME,
     build_robots_txt,
@@ -46,33 +54,14 @@ from app.services.sitemap_service import (
     get_sitemap_document,
     is_valid_sitemap_part_name,
 )
+from db.async_engine import dispose_app_async_engines
 from db.database import database
+from db.sync_engine import dispose_app_sync_engines
 
 # Load environment variables from .env file
 load_dotenv()
-
-
-def _should_enable_appsignal() -> bool:
-    raw = os.getenv("ENABLE_APPSIGNAL", "false").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
-
-
-def _appsignal_config_present() -> bool:
-    config_candidates = [
-        Path.cwd() / "__appsignal__.py",
-        Path(__file__).resolve().parents[1] / "__appsignal__.py",
-    ]
-    return any(path.exists() for path in config_candidates)
-
-
-if appsignal is not None and os.getenv("APP_ENV") != "test" and _should_enable_appsignal():
-    if _appsignal_config_present():
-        try:
-            appsignal.start()
-        except Exception as exc:
-            print(f"AppSignal disabled: startup failed ({exc})", file=sys.stderr)
-    else:
-        print("AppSignal disabled: no __appsignal__.py configuration file found", file=sys.stderr)
+if appsignal is not None and os.getenv("APP_ENV") != "test":
+    appsignal.start()
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
@@ -151,11 +140,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error disconnecting from sitemap store: {str(e)}")
 
+    try:
+        await dispose_app_async_engines()
+        dispose_app_sync_engines()
+        logger.info("Disposed SQLAlchemy engines")
+    except Exception as e:
+        logger.error(f"Error disposing SQLAlchemy engines: {str(e)}")
+
 
 # Create FastAPI application
 app = FastAPI(
-    title="OpenGeoMetadata API",
-    version="0.6.0",
+    title="BTAA Geospatial API",
+    version="0.7.0",
     lifespan=lifespan,
     docs_url=None,
     redoc_url="/api/redoc",
@@ -232,12 +228,14 @@ app.add_middleware(
         "X-BTAA-Client-Version",
         "X-BTAA-Client-Channel",
         "X-BTAA-Client-Instance",
+        "X-Turnstile-Session",
     ],
     expose_headers=[
         "Content-Type",
         "Content-Length",
         "X-Total-Count",
         "Link",
+        "X-Turnstile-Required",
     ],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
@@ -248,14 +246,18 @@ app.add_middleware(CrossOriginHeadersMiddleware)
 # Add rate limiting middleware
 app.add_middleware(RateLimitMiddleware)
 
+# Add Cloudflare Turnstile browser gate middleware
+app.add_middleware(TurnstileMiddleware)
+
+# Add request IDs after other middleware so it runs first in the Starlette stack.
+app.add_middleware(RequestIDMiddleware)
+
 # Include routers
 app.include_router(public_router, prefix="/api/v1")
 app.include_router(ogc_router, prefix="/api/v1/ogc")
 
-
-@app.get("/", include_in_schema=False)
-async def root_docs_redirect():
-    return RedirectResponse(url="/api/docs", status_code=308)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 
 @app.get("/api/v1", include_in_schema=False)
@@ -304,21 +306,24 @@ async def robots_txt() -> PlainTextResponse:
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler for the application."""
-    logger.error(f"Global exception handler caught: {str(exc)}", exc_info=True)
+    request_id = get_request_id(request)
+    logger.error(
+        "Global exception handler caught request_id=%s path=%s",
+        request_id,
+        request.url.path,
+        exc_info=True,
+    )
 
     if isinstance(exc, HTTPException):
-        return JSONResponse(
+        response = JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
         )
+        if request_id:
+            response.headers["X-Request-ID"] = request_id
+        return response
 
-    return JSONResponse(
-        status_code=500,
-        content={
-            "message": "An unexpected error occurred",
-            "error": str(exc),
-        },
-    )
+    return internal_server_error_response(request)
 
 
 # Frontend is now served by React Router v7 in a separate Docker container
@@ -406,7 +411,7 @@ async def custom_docs(request: Request) -> HTMLResponse:
             "docs.html",
             {
                 "request": request,
-                "title": "OpenGeoMetadata API — Endpoints",
+                "title": "BTAA Geospatial API — Endpoints",
                 "openapi_url": app.openapi_url,
             },
         )

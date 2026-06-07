@@ -1,38 +1,17 @@
-from __future__ import annotations
+from typing import Optional
 
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Optional
+from fastapi import APIRouter, Query
 
-from fastapi import APIRouter, Query, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-
+from app.api.errors import PUBLIC_ERROR_RESPONSES
+from app.api.schemas import OGMHarvestFailuresResponse, OGMRepoSummariesResponse
 from app.api.v1.utils import create_response
 from app.services.ogm_harvest.repository import OGMHarvestRepository
 
 router = APIRouter()
 ogm_repo = OGMHarvestRepository()
-TEMPLATES_DIR = Path(__file__).resolve().parents[4] / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR)) if TEMPLATES_DIR.exists() else None
 
 
-def _format_timestamp(value: Any) -> Optional[str]:
-    if value in (None, ""):
-        return None
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M UTC")
-    if isinstance(value, str):
-        try:
-            normalized = value.replace("Z", "+00:00")
-            parsed = datetime.fromisoformat(normalized)
-            return parsed.strftime("%Y-%m-%d %H:%M UTC")
-        except ValueError:
-            return value
-    return str(value)
-
-
-@router.get("/ogm/repos")
+@router.get("/ogm/repos", response_model=OGMRepoSummariesResponse, responses=PUBLIC_ERROR_RESPONSES)
 async def list_public_ogm_repos():
     """
     Public OGM repo summaries with latest crawl status and harvest counts.
@@ -42,106 +21,10 @@ async def list_public_ogm_repos():
 
 
 @router.get(
-    "/ogm/repos/dashboard",
-    include_in_schema=False,
-    response_class=HTMLResponse,
+    "/ogm/harvest/failures",
+    response_model=OGMHarvestFailuresResponse,
+    responses=PUBLIC_ERROR_RESPONSES,
 )
-async def ogm_repo_dashboard(request: Request):
-    repos = await ogm_repo.list_public_repo_summaries()
-
-    dashboard_repos = []
-    total_harvested = 0
-    total_available = 0
-    repos_with_aardvark = 0
-    enabled_repos = 0
-    never_harvested = 0
-
-    for repo in repos:
-        harvested_count = int(repo.get("harvested_record_count") or 0)
-        available_count = int(repo.get("available_record_count") or 0)
-        unpublished_count = int(repo.get("unpublished_record_count") or 0)
-        has_aardvark = bool(repo.get("ogm_has_aardvark"))
-        enabled = bool(repo.get("ogm_enabled"))
-        last_harvest_completed = repo.get("last_crawl_completed_at")
-        hidden_count = max(harvested_count - available_count, 0)
-        other_hidden_count = max(hidden_count - unpublished_count, 0)
-        api_hidden_breakdown = []
-        if unpublished_count:
-            api_hidden_breakdown.append({"count": unpublished_count, "label": "unpublished"})
-        if other_hidden_count:
-            api_hidden_breakdown.append(
-                {"count": other_hidden_count, "label": "not yet synced"}
-            )
-
-        total_harvested += harvested_count
-        total_available += available_count
-        repos_with_aardvark += int(has_aardvark)
-        enabled_repos += int(enabled)
-        never_harvested += int(not bool(last_harvest_completed))
-
-        dashboard_repos.append(
-            {
-                **repo,
-                "display_last_commit_at": _format_timestamp(repo.get("last_commit_at")),
-                "display_last_harvest_at": _format_timestamp(last_harvest_completed),
-                "display_last_harvest_started_at": _format_timestamp(
-                    repo.get("last_crawl_started_at")
-                ),
-                "harvest_gap_count": hidden_count,
-                "api_hidden_breakdown": api_hidden_breakdown,
-            }
-        )
-
-    summary = {
-        "repo_count": len(dashboard_repos),
-        "enabled_repo_count": enabled_repos,
-        "repos_with_aardvark_count": repos_with_aardvark,
-        "never_harvested_count": never_harvested,
-        "harvested_record_count": total_harvested,
-        "available_record_count": total_available,
-    }
-
-    if templates is None:
-        rows = "".join(
-            (
-                "<tr>"
-                f"<td>{repo.get('ogm_repo_name') or ''}</td>"
-                f"<td>{repo.get('display_last_commit_at') or '-'}</td>"
-                f"<td>{repo.get('display_last_harvest_at') or '-'}</td>"
-                f"<td>{'yes' if repo.get('ogm_has_aardvark') else 'no'}</td>"
-                f"<td>{repo.get('harvested_record_count') or 0}</td>"
-                f"<td>{repo.get('available_record_count') or 0}</td>"
-                "</tr>"
-            )
-            for repo in dashboard_repos
-        )
-        return HTMLResponse(
-            (
-                "<!doctype html><html><head>"
-                "<title>OpenGeoMetadata Repository Dashboard</title>"
-                "</head>"
-                "<body><h1>OpenGeoMetadata Repository Dashboard</h1>"
-                "<p>Templates are unavailable, showing a minimal fallback view.</p>"
-                "<table><thead><tr>"
-                "<th>Repository</th><th>Last commit</th><th>Last harvest</th>"
-                "<th>Aardvark</th><th>Harvested</th><th>Available</th>"
-                f"</tr></thead><tbody>{rows}</tbody></table></body></html>"
-            )
-        )
-
-    return templates.TemplateResponse(
-        "ogm_repo_dashboard.html",
-        {
-            "request": request,
-            "title": "OpenGeoMetadata Repository Dashboard",
-            "summary": summary,
-            "repos": dashboard_repos,
-            "generated_at": _format_timestamp(datetime.utcnow()),
-        },
-    )
-
-
-@router.get("/ogm/harvest/failures")
 async def list_public_ogm_harvest_failures(
     repo_name: Optional[str] = Query(None, description="Filter by a single ogm_repo_name"),
     include_with_errors: bool = Query(
