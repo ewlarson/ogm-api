@@ -115,6 +115,12 @@ python scripts/trigger_ogm_nightly_sync.py
 Production also includes `.github/workflows/ogm-nightly-sync.yml`, which SSHes to
 the production host nightly and runs the same in-container script.
 
+Kamal cron support is also downstream-owned here: `config/deploy.yml` defines a
+`cron` role, `config/crontab` is copied into the production image, and
+`backend/scripts/start_cron.sh` loads it. The OGM nightly cron entry is gated by
+`OGM_NIGHTLY_CRON_ENABLED=false` by default so the GitHub Actions workflow remains
+the only active nightly scheduler unless production intentionally switches over.
+
 For near-real-time harvesting, configure an OpenGeoMetadata organization webhook:
 
 - Payload URL: `https://ogm.geo4lib.app/api/v1/admin/ogm/webhook`

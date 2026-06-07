@@ -5,6 +5,8 @@
 # and OGM harvesting behavior. Root-level entries document the wider overlay.
 
 .github/workflows/ogm-nightly-sync.yml
+config/crontab
+config/deploy.yml
 Dockerfile
 Makefile
 README.md
@@ -13,6 +15,8 @@ docs/
 scripts/
 
 backend/scripts/trigger_ogm_nightly_sync.py
+backend/scripts/render_cron_env.py
+backend/scripts/start_cron.sh
 backend/scripts/prime_generated_caches.py
 backend/scripts/start_cache_prime_background.sh
 backend/scripts/run_migrations.py

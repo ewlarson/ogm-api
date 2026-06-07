@@ -1,0 +1,29 @@
+# Cron job definitions for the Kamal cron container.
+#
+# This file is copied into the image and loaded by backend/scripts/start_cron.sh.
+# Cron strips most container env vars; BASH_ENV reloads the startup snapshot
+# written by backend/scripts/render_cron_env.py before each job starts.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+BASH_ENV=/app/scripts/cron_env.sh
+CRON_TZ=America/Chicago
+TZ=America/Chicago
+PYTHON_BIN=/usr/local/bin/python
+
+# Daily 2:15 AM local: optional in-container OGM repo refresh + harvest enqueue.
+# This is disabled by default because .github/workflows/ogm-nightly-sync.yml is
+# currently the active nightly scheduler. Set OGM_NIGHTLY_CRON_ENABLED=true only
+# after disabling the GitHub Actions schedule, or production will enqueue twice.
+15 2 * * * if [ "${OGM_NIGHTLY_CRON_ENABLED:-false}" = "true" ]; then "$PYTHON_BIN" /app/scripts/trigger_ogm_nightly_sync.py; else echo "$(date -Is) OGM nightly cron disabled; GitHub Actions workflow is primary"; fi >> /proc/1/fd/1 2>> /proc/1/fd/2
+
+# Daily 4:15 AM local: regenerate sitemap XML after overnight content refreshes.
+15 4 * * * "$PYTHON_BIN" /app/scripts/generate_sitemap.py >> /proc/1/fd/1 2>> /proc/1/fd/2
+
+# Daily 4:45 AM local: roll up analytics, create future partitions, and drop
+# expired raw partitions.
+45 4 * * * "$PYTHON_BIN" /app/backend/scripts/manage_analytics_storage.py --mode maintenance >> /proc/1/fd/1 2>> /proc/1/fd/2
+
+# Hourly: prune expired durable API response cache rows so the Postgres L2 cache
+# stays bounded even if Redis is cold or search traffic is high.
+17 * * * * "$PYTHON_BIN" /app/backend/scripts/prune_generated_api_response_cache.py >> /proc/1/fd/1 2>> /proc/1/fd/2
