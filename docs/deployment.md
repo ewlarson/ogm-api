@@ -99,11 +99,23 @@ Secrets are managed through `.kamal/secrets` file. **This file should NEVER cont
 
 ### Required Secrets
 
-Add these environment variables to your local shell before deployment:
+Add these environment variables to your local shell before deployment, or store the
+GHCR token in `.kamal/registry-password` or macOS Keychain so every new terminal
+can deploy:
 
 ```bash
 # GitHub Container Registry token (required for pulling images)
 export KAMAL_REGISTRY_PASSWORD="your_github_token"
+
+# One-time local setup for file-backed deploys; .kamal/ is gitignored
+install -m 600 /dev/null .kamal/registry-password
+printf '%s' "$KAMAL_REGISTRY_PASSWORD" > .kamal/registry-password
+
+# Or let the repo helper store the token and verify GHCR auth
+make kamal-registry-login
+
+# Optional one-time local setup for macOS Keychain-backed deploys
+security add-generic-password -U -a ewlarson -s ogm-api-ghcr-token -w "$KAMAL_REGISTRY_PASSWORD"
 
 # OpenAI API key (for AI features)
 export OPENAI_API_KEY="your_openai_key"
@@ -153,6 +165,10 @@ env:
     LOG_LEVEL: DEBUG
     ENDPOINT_CACHE: "true"
     GAZETTEER_CACHE_TTL: "3600"
+    RESOURCE_REPRESENTATION_DURABLE_STORE: database
+    API_RESPONSE_DURABLE_CACHE_STORE: database
+    VISUAL_ASSET_DURABLE_STORE: database
+    VISUAL_ASSET_CACHE_TTL_SECONDS: "0"
     ENABLE_FAST_EMBEDDINGS: "false"
     APP_MODE: production
     APP_ENV: production
@@ -259,6 +275,40 @@ kamal app exec "python /app/backend/scripts/trigger_ogm_nightly_sync.py"
 
 That command refreshes the discovered OpenGeoMetadata repository list and enqueues
 the scheduled OGM harvest tasks for enabled repos.
+
+### Prime Generated Caches
+
+After migrations, indexing, or a large OGM harvest, run the generated-cache
+primer so resource JSON, thumbnails, and static maps are ready before first user
+traffic asks for them.
+
+Run a bounded foreground smoke:
+
+```bash
+kamal app exec "cd /app/backend && python scripts/prime_generated_caches.py --limit 100"
+```
+
+Start a full background run:
+
+```bash
+kamal app exec "cd /app/backend && ./scripts/start_cache_prime_background.sh"
+```
+
+Watch progress:
+
+```bash
+kamal app exec "tail -f /app/backend/logs/prime_generated_caches.log"
+```
+
+Full runs write durable database-backed generated resources and visual assets by
+default. Add `--hydrate-assets` only for a bounded hotset or for a Redis host
+sized to hold full image bodies:
+
+```bash
+kamal app exec "cd /app/backend && ./scripts/start_cache_prime_background.sh --hydrate-assets --limit 500"
+```
+
+See [Generated Cache Priming](cache_priming.md) for the full command reference.
 
 ### Build Only
 
@@ -543,27 +593,32 @@ ssh ewlarson@ogm.geo4lib.app "curl localhost:9200/_cluster/health?pretty"
 Here's a typical workflow for deploying changes:
 
 ```bash
-# 1. Ensure secrets are set
-export KAMAL_REGISTRY_PASSWORD="your_token"
+# 1. Store and verify the GHCR token once per token rotation
+make kamal-registry-login
+
+# 2. Ensure app secrets are set
 export OPENAI_API_KEY="your_key"
 
-# 2. Verify configuration
+# 3. Verify configuration
 kamal config
 
-# 3. Deploy the application
+# 4. Deploy the application
 kamal deploy
 
-# 4. Monitor deployment
+# 5. Monitor deployment
 kamal app logs --follow
 
-# 5. Verify deployment
+# 6. Verify deployment
 curl https://ogm.geo4lib.app/api/docs
 
-# 6. If needed, run migrations
+# 7. If needed, run migrations
 kamal app exec "python /app/backend/scripts/run_migrations.py"
 
-# 7. If needed, rebuild search index
+# 8. If needed, rebuild search index
 kamal app exec "python /app/backend/scripts/run_index.py"
+
+# 9. If needed, warm generated resource, thumbnail, and static-map caches
+kamal app exec "cd /app/backend && ./scripts/start_cache_prime_background.sh --limit 5000"
 ```
 
 ## CI/CD Integration

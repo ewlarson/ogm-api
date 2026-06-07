@@ -16,6 +16,7 @@ except ImportError:
 from shapely import wkt as shapely_wkt
 from shapely.geometry import mapping as shapely_mapping
 
+from app.services.language_service import ensure_b1g_language
 from db.database import database
 from db.models import resources
 
@@ -30,7 +31,6 @@ except (OSError, PermissionError):
     pass
 
 logger = logging.getLogger(__name__)
-_SPATIAL_FACETS_TABLE_AVAILABLE: bool | None = None
 
 
 def _get_failure_logger():
@@ -233,7 +233,11 @@ async def process_resource(resource_dict):
 
     date_fields = {"gbl_mdmodified_dt", "b1g_dateAccessioned_s", "b1g_dateRetired_s"}
     integer_fields = {"gbl_indexYear_im"}
-    boolean_fields = {"gbl_georeferenced_b", "b1g_child_record_b"}
+    boolean_fields = {
+        "gbl_georeferenced_b",
+        "b1g_child_record_b",
+        "b1g_georeferenced_allmaps_b",
+    }
 
     for key, value in resource_dict.items():
         if isinstance(value, (list, tuple)):
@@ -288,6 +292,8 @@ async def process_resource(resource_dict):
         else:
             processed_dict[key] = value
 
+    ensure_b1g_language(processed_dict)
+
     # Derive OGM repo facet/filter field from admin tags.
     # Source-of-truth tag format stored in Postgres: "ogm_repo:<repo_name>"
     tags = processed_dict.get("b1g_adminTags_sm")
@@ -317,6 +323,10 @@ async def process_resource(resource_dict):
     if summaries:
         first = summaries[0]
         processed_dict["summary"] = first.get("summary") or None
+
+    processed_dict["b1g_georeferenced_allmaps_b"] = await get_allmaps_overlay_status(
+        processed_dict["id"]
+    )
 
     # Calculate and add time_period facet
     time_period = _calculate_time_period_from_year(processed_dict.get("gbl_indexYear_im"))
@@ -387,13 +397,27 @@ async def get_resource_summaries(resource_id):
         return []
 
 
+async def get_allmaps_overlay_status(resource_id):
+    """Return whether a resource has an annotated Allmaps overlay."""
+    try:
+        query = """
+            SELECT annotated
+            FROM resource_allmaps
+            WHERE resource_id = :resource_id
+            ORDER BY id DESC
+            LIMIT 1
+        """
+        result = await database.fetch_one(query, {"resource_id": resource_id})
+        if not result:
+            return False
+        return bool(dict(result).get("annotated"))
+    except Exception as e:
+        logger.error(f"Error getting Allmaps status for resource {resource_id}: {str(e)}")
+        return False
+
+
 async def get_spatial_facets(resource_id):
     """Get spatial facets for a resource."""
-    global _SPATIAL_FACETS_TABLE_AVAILABLE
-
-    if _SPATIAL_FACETS_TABLE_AVAILABLE is False:
-        return None
-
     try:
         query = """
             SELECT geo_global, geo_country, geo_region, geo_county
@@ -401,7 +425,6 @@ async def get_spatial_facets(resource_id):
             WHERE resource_id = :resource_id
         """
         result = await database.fetch_one(query, {"resource_id": resource_id})
-        _SPATIAL_FACETS_TABLE_AVAILABLE = True
 
         if result:
             spatial_facets = dict(result)
@@ -464,12 +487,6 @@ async def get_spatial_facets(resource_id):
             return spatial_facets
         return None
     except Exception as e:
-        if 'relation "resource_spatial_facets" does not exist' in str(e):
-            _SPATIAL_FACETS_TABLE_AVAILABLE = False
-            logger.warning(
-                "resource_spatial_facets table is missing; continuing without spatial facets"
-            )
-            return None
         logger.error(f"Error getting spatial facets for resource {resource_id}: {str(e)}")
         return None
 

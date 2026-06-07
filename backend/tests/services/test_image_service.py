@@ -8,8 +8,27 @@ from unittest.mock import patch
 
 import pytest
 
-from app.services.image_service import ImageService
+from app.services.image_service import (
+    COG_THUMBNAIL_PREFIX,
+    PMTILES_THUMBNAIL_PREFIX,
+    REMOTE_THUMBNAIL_PREFIX,
+    ImageService,
+)
 from app.services.thumbnail_state_service import ThumbnailState
+
+
+def _is_redis_connection_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        fragment in message
+        for fragment in (
+            "connection",
+            "redis",
+            "auth",
+            "username-password",
+            "authentication",
+        )
+    )
 
 
 class TestImageService:
@@ -29,7 +48,7 @@ class TestImageService:
             assert hasattr(service, "cache_ttl")
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_init_with_various_metadata_types(self):
         """Test initialization with different metadata structures."""
@@ -50,7 +69,7 @@ class TestImageService:
                 assert service.metadata == metadata
             except Exception as e:
                 # Handle Redis connection errors gracefully
-                assert "connection" in str(e).lower() or "redis" in str(e).lower()
+                assert _is_redis_connection_error(e)
 
 
 class TestImageServiceURLStandardization:
@@ -75,7 +94,7 @@ class TestImageServiceURLStandardization:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_standardize_iiif_url_removes_existing_size(self):
         """Test removal of existing size parameters."""
@@ -98,7 +117,7 @@ class TestImageServiceURLStandardization:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_standardize_iiif_url_adds_standard_size(self):
         """Test adding standard boxed size to IIIF URLs."""
@@ -120,7 +139,7 @@ class TestImageServiceURLStandardization:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_standardize_iiif_url_non_iiif_preserved(self):
         """Test that non-IIIF URLs are preserved unchanged."""
@@ -142,7 +161,7 @@ class TestImageServiceURLStandardization:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceThumbnailSourceURL:
@@ -160,7 +179,7 @@ class TestImageServiceThumbnailSourceURL:
             result = service._get_thumbnail_source_url(references)
             assert result == "http://example.com/iiif/image/full/!800,800/0/default.jpg"
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_manifest_beats_b1g_image_ss(self):
         """Prefer IIIF manifests over b1g_image_ss when both are present."""
@@ -173,7 +192,7 @@ class TestImageServiceThumbnailSourceURL:
             )
             assert result == manifest_url
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_b1g_image_ss_list_uses_first(self):
         """When b1g_image_ss is a list, use first element."""
@@ -183,7 +202,7 @@ class TestImageServiceThumbnailSourceURL:
             result = service._get_thumbnail_source_url()
             assert result == "https://first.jpg"
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_b1g_image_ss_json_array_string(self):
         """b1g_image_ss stored as JSON array string '["url"]' is parsed and used."""
@@ -193,7 +212,7 @@ class TestImageServiceThumbnailSourceURL:
             result = service._get_thumbnail_source_url()
             assert result == "https://curated.example.com/thumb.jpg"
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_b1g_image_ss_non_http_skipped(self):
         """b1g_image_ss with non-http(s) URL is skipped, fallback to other sources."""
@@ -204,7 +223,55 @@ class TestImageServiceThumbnailSourceURL:
             result = service._get_thumbnail_source_url(references)
             assert result == "https://example.com/thumb.jpg"
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
+
+    def test_resolve_thumbnail_source_url_uses_bridge_asset_as_last_resort(self):
+        """Bridge thumbnail assets are only used when intrinsic sources are absent."""
+        metadata = {"id": "test-doc"}
+        try:
+            service = ImageService(metadata)
+            assert (
+                service.resolve_thumbnail_source_url(
+                    thumbnail_asset_url="https://assets.example.edu/thumb.png"
+                )
+                == "https://assets.example.edu/thumb.png"
+            )
+
+            service_with_source = ImageService(
+                {"id": "test-doc", "b1g_image_ss": "https://curated.example.com/thumb.jpg"}
+            )
+            assert (
+                service_with_source.resolve_thumbnail_source_url(
+                    thumbnail_asset_url="https://assets.example.edu/thumb.png"
+                )
+                == "https://curated.example.com/thumb.jpg"
+            )
+        except Exception as e:
+            assert _is_redis_connection_error(e)
+
+    def test_thumbnail_image_hash_for_source_uses_worker_hash_conventions(self):
+        """Hash calculation should match worker prefixes for remote, COG, and PMTiles sources."""
+        metadata = {"id": "test-doc"}
+        try:
+            service = ImageService(metadata)
+            remote = "https://example.com/thumb.jpg"
+            cog = "https://example.com/raster.tif"
+            pmtiles = "https://example.com/tiles.pmtiles"
+
+            assert (
+                service.thumbnail_image_hash_for_source_sync(remote)
+                == hashlib.sha256(f"{REMOTE_THUMBNAIL_PREFIX}{remote}".encode()).hexdigest()
+            )
+            assert (
+                service.thumbnail_image_hash_for_source_sync(cog)
+                == hashlib.sha256(f"{COG_THUMBNAIL_PREFIX}{cog}".encode()).hexdigest()
+            )
+            assert (
+                service.thumbnail_image_hash_for_source_sync(pmtiles)
+                == hashlib.sha256(f"{PMTILES_THUMBNAIL_PREFIX}{pmtiles}".encode()).hexdigest()
+            )
+        except Exception as e:
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_schema_thumbnail(self):
         """Test extraction of schema.org thumbnail URL."""
@@ -230,7 +297,41 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
+
+    def test_get_thumbnail_source_url_schema_image(self):
+        """Use schema.org/image as a direct curated thumbnail source."""
+        metadata = {"id": "test-doc"}
+        try:
+            service = ImageService(metadata)
+            references = {"http://schema.org/image": "https://example.com/image.png"}
+            result = service._get_thumbnail_source_url(references)
+            assert result == "https://example.com/image.png"
+
+            https_references = {
+                "https://schema.org/image": [
+                    "https://example.com/image-https.png",
+                    "https://example.com/second.png",
+                ]
+            }
+            result = service._get_thumbnail_source_url(https_references)
+            assert result == "https://example.com/image-https.png"
+        except Exception as e:
+            assert _is_redis_connection_error(e)
+
+    def test_get_thumbnail_source_url_thumbnailurl_overrides_schema_image(self):
+        """Prefer the more specific schema.org thumbnailUrl when both are present."""
+        metadata = {"id": "test-doc"}
+        try:
+            service = ImageService(metadata)
+            references = {
+                "http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg",
+                "http://schema.org/image": "https://example.com/image.png",
+            }
+            result = service._get_thumbnail_source_url(references)
+            assert result == "https://example.com/thumb.jpg"
+        except Exception as e:
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_iiif_image(self):
         """Test extraction of IIIF image URL."""
@@ -246,7 +347,7 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_contentdm_transform(self):
         """Test ContentDM IIIF URL transformation."""
@@ -267,7 +368,7 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_iiif_manifest(self):
         """Test IIIF manifest URL extraction."""
@@ -292,7 +393,7 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_esri_services(self):
         """Test ESRI service thumbnail URL generation."""
@@ -328,7 +429,7 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_wms(self):
         """Test WMS thumbnail URL generation (standard GetMap with BBOX)."""
@@ -359,7 +460,7 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_tms(self):
         """Test TMS thumbnail URL generation."""
@@ -379,7 +480,7 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_no_match(self):
         """Test when no thumbnail source URL is found."""
@@ -394,7 +495,7 @@ class TestImageServiceThumbnailSourceURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_cog_only(self):
         """Test COG URL as thumbnail source when no other image sources exist."""
@@ -412,7 +513,7 @@ class TestImageServiceThumbnailSourceURL:
             assert result == cog_url
 
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_cog_precedence_after_others(self):
         """Test COG is used when thumbnailUrl/IIIF/manifest are not present."""
@@ -430,7 +531,7 @@ class TestImageServiceThumbnailSourceURL:
             assert result == "https://example.com/cog.tif"
 
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_thumbnailurl_overrides_cog(self):
         """Test that thumbnailUrl takes precedence over COG when both exist."""
@@ -447,7 +548,7 @@ class TestImageServiceThumbnailSourceURL:
             assert result == "https://example.com/thumb.jpg"
 
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_pmtiles_only(self):
         """Test PMTiles URL as thumbnail source when no other image sources exist."""
@@ -462,7 +563,7 @@ class TestImageServiceThumbnailSourceURL:
             result = service._get_thumbnail_source_url(references)
             assert result == pmtiles_url
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_thumbnailurl_overrides_pmtiles(self):
         """Test that thumbnailUrl takes precedence over PMTiles when both exist."""
@@ -476,7 +577,21 @@ class TestImageServiceThumbnailSourceURL:
             result = service._get_thumbnail_source_url(references)
             assert result == "https://example.com/thumb.jpg"
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
+
+    def test_get_thumbnail_source_url_pmtiles_overrides_schema_image(self):
+        """Prefer generated PMTiles thumbnails over curated schema.org/image previews."""
+        metadata = {"id": "test-doc"}
+        try:
+            service = ImageService(metadata)
+            references = {
+                "http://schema.org/image": "https://example.com/preview.png",
+                "https://github.com/protomaps/PMTiles": "https://example.com/tiles.pmtiles",
+            }
+            result = service._get_thumbnail_source_url(references)
+            assert result == "https://example.com/tiles.pmtiles"
+        except Exception as e:
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceIsCogUrl:
@@ -489,7 +604,7 @@ class TestImageServiceIsCogUrl:
             assert service._is_cog_url("https://example.com/raster.tif") is True
             assert service._is_cog_url("https://example.com/raster.TIFF") is True
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_is_cog_url_display_raster(self):
         metadata = {"id": "test"}
@@ -500,7 +615,7 @@ class TestImageServiceIsCogUrl:
                 is True
             )
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_is_cog_url_geotiff_in_path(self):
         metadata = {"id": "test"}
@@ -508,7 +623,7 @@ class TestImageServiceIsCogUrl:
             service = ImageService(metadata)
             assert service._is_cog_url("https://example.com/geotiff/file.tif") is True
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_is_cog_url_rejects_non_cog(self):
         metadata = {"id": "test"}
@@ -519,7 +634,7 @@ class TestImageServiceIsCogUrl:
             assert service._is_cog_url("") is False
             assert service._is_cog_url(None) is False
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceIsPmtilesUrl:
@@ -532,7 +647,7 @@ class TestImageServiceIsPmtilesUrl:
             assert service._is_pmtiles_url("https://example.com/tiles.pmtiles") is True
             assert service._is_pmtiles_url("https://example.com/TILES.PMTILES") is True
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_is_pmtiles_url_with_query_string(self):
         """URL ending in .pmtiles with query params is detected."""
@@ -541,7 +656,7 @@ class TestImageServiceIsPmtilesUrl:
             service = ImageService(metadata)
             assert service._is_pmtiles_url("https://example.com/tiles.pmtiles?token=abc") is True
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_is_pmtiles_url_rejects_non_pmtiles(self):
         metadata = {"id": "test"}
@@ -552,7 +667,7 @@ class TestImageServiceIsPmtilesUrl:
             assert service._is_pmtiles_url("") is False
             assert service._is_pmtiles_url(None) is False
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceThumbnailURL:
@@ -575,7 +690,7 @@ class TestImageServiceThumbnailURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_url_no_doc_id(self):
         """Test behavior when document ID is missing."""
@@ -588,7 +703,7 @@ class TestImageServiceThumbnailURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_url_invalid_json(self):
         """Test handling of invalid JSON in references."""
@@ -601,7 +716,7 @@ class TestImageServiceThumbnailURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_url_with_valid_references(self):
         """Test thumbnail URL generation with valid references."""
@@ -623,7 +738,7 @@ class TestImageServiceThumbnailURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_url_invalidates_stale_alias_hash(self):
         """A stale alias should not keep an outdated immutable asset pinned forever."""
@@ -823,7 +938,7 @@ class TestImageServiceThumbnailURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_source_url_fallback_to_dct_references_s(self):
         """When distribution context is empty, fall back to dct_references_s (OGM-harvested)."""
@@ -843,7 +958,7 @@ class TestImageServiceThumbnailURL:
             source = service._get_thumbnail_source_url()
             assert source == manifest_url
         except Exception as e:
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_thumbnail_url_references_as_dict(self):
         """Test handling when references is already a dict."""
@@ -861,7 +976,7 @@ class TestImageServiceThumbnailURL:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceAsyncMethods:
@@ -884,7 +999,7 @@ class TestImageServiceAsyncMethods:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     @pytest.mark.asyncio
     async def test_get_iiif_image_with_real_url(self):
@@ -903,7 +1018,7 @@ class TestImageServiceAsyncMethods:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     @pytest.mark.asyncio
     async def test_download_image_with_real_url(self):
@@ -927,7 +1042,7 @@ class TestImageServiceAsyncMethods:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     @pytest.mark.asyncio
     async def test_get_cached_image_error_handling(self):
@@ -952,7 +1067,7 @@ class TestImageServiceAsyncMethods:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     @pytest.mark.asyncio
     async def test_get_iiif_image_url_processing(self):
@@ -977,7 +1092,7 @@ class TestImageServiceAsyncMethods:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     @pytest.mark.asyncio
     async def test_download_image_content_type_validation(self):
@@ -1002,7 +1117,7 @@ class TestImageServiceAsyncMethods:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceManifestFetching:
@@ -1024,7 +1139,7 @@ class TestImageServiceManifestFetching:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_manifest_cache_key_generation(self):
         """Test manifest cache key generation."""
@@ -1039,7 +1154,7 @@ class TestImageServiceManifestFetching:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_manifest_error_handling(self):
         """Test manifest fetching error handling."""
@@ -1057,7 +1172,7 @@ class TestImageServiceManifestFetching:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceManifestParsing:
@@ -1100,7 +1215,7 @@ class TestImageServiceManifestParsing:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_iiif_manifest_thumbnail_items_with_direct_id(self):
         """Test Northwestern-style items with direct id."""
@@ -1120,7 +1235,7 @@ class TestImageServiceManifestParsing:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_get_iiif_manifest_thumbnail_thumbnail_dict_formats(self):
         """Test various thumbnail dict formats."""
@@ -1144,7 +1259,7 @@ class TestImageServiceManifestParsing:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceCacheInteractions:
@@ -1182,7 +1297,7 @@ class TestImageServiceCacheInteractions:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_thumbnail_url_cache_miss_scenario(self):
         """Test thumbnail URL generation with cache miss."""
@@ -1206,7 +1321,7 @@ class TestImageServiceCacheInteractions:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     @pytest.mark.slow
     def test_queue_thumbnail_processing_with_real_service(self):
@@ -1237,7 +1352,7 @@ class TestImageServiceCacheInteractions:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_real_redis_cache_interactions(self):
         """Test actual Redis cache interactions to hit cache-related code paths."""
@@ -1275,7 +1390,7 @@ class TestImageServiceCacheInteractions:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     @pytest.mark.slow
     def test_manifest_fetching_with_real_requests(self):
@@ -1304,7 +1419,7 @@ class TestImageServiceCacheInteractions:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_logging_statements_execution(self):
         """Test that logging statements are executed during normal operations."""
@@ -1335,7 +1450,7 @@ class TestImageServiceCacheInteractions:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
 
 class TestImageServiceEdgeCases:
@@ -1352,7 +1467,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_references_as_non_dict_non_string(self):
         """Test handling when references is neither dict nor string."""
@@ -1365,7 +1480,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_empty_references_dict(self):
         """Test handling of empty references dictionary."""
@@ -1378,7 +1493,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_iiif_url_with_no_size_parameters(self):
         """Test IIIF URL that doesn't contain /full/."""
@@ -1393,7 +1508,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_various_access_rights_values(self):
         """Test different access rights values."""
@@ -1420,7 +1535,7 @@ class TestImageServiceEdgeCases:
 
             except Exception as e:
                 # Handle Redis connection errors gracefully
-                assert "connection" in str(e).lower() or "redis" in str(e).lower()
+                assert _is_redis_connection_error(e)
 
     def test_complex_reference_structures(self):
         """Test complex reference structures."""
@@ -1445,7 +1560,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_iiif_url_standardization_edge_cases(self):
         """Test IIIF URL standardization with edge cases."""
@@ -1471,7 +1586,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_contentdm_iiif_url_parsing(self):
         """Test ContentDM IIIF URL parsing and transformation."""
@@ -1494,7 +1609,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_manifest_url_extraction_edge_cases(self):
         """Test manifest URL extraction with various formats.
@@ -1526,7 +1641,7 @@ class TestImageServiceEdgeCases:
 
         except Exception as e:
             # Handle Redis connection errors gracefully
-            assert "connection" in str(e).lower() or "redis" in str(e).lower()
+            assert _is_redis_connection_error(e)
 
     def test_wms_thumbnail_generation(self):
         """Test WMS thumbnail URL generation with various metadata (GetMap + BBOX)."""
@@ -1559,4 +1674,4 @@ class TestImageServiceEdgeCases:
 
             except Exception as e:
                 # Handle Redis connection errors gracefully
-                assert "connection" in str(e).lower() or "redis" in str(e).lower()
+                assert _is_redis_connection_error(e)

@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.services.cache_service import CacheService
+from app.services.cache_service import CACHE_ROOT, CacheService, _redis_call
 from app.services.distribution_repository import async_session_factory
 from db.models import generated_resource_representations
 
@@ -20,9 +20,20 @@ RESOURCE_REPRESENTATION_CACHE_TTL = int(
 )
 RESOURCE_REPRESENTATION_NAMESPACE = "resource_representation"
 RESOURCE_REPRESENTATION_PROFILE = "api-full"
+RESOURCE_SEARCH_RESULT_REPRESENTATION_PROFILE = "search-result"
+RESOURCE_REPRESENTATION_PROFILES = (
+    RESOURCE_REPRESENTATION_PROFILE,
+    RESOURCE_SEARCH_RESULT_REPRESENTATION_PROFILE,
+)
 RESOURCE_REPRESENTATION_DURABLE_STORE = os.getenv(
     "RESOURCE_REPRESENTATION_DURABLE_STORE", "database"
 ).lower()
+RESOURCE_REPRESENTATION_BULK_STORE_BATCH_SIZE = int(
+    os.getenv("RESOURCE_REPRESENTATION_BULK_STORE_BATCH_SIZE", "250")
+)
+RESOURCE_REPRESENTATION_DELETE_BATCH_SIZE = int(
+    os.getenv("RESOURCE_REPRESENTATION_DELETE_BATCH_SIZE", "10000")
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +51,21 @@ def resource_representation_cache_key(resource_id: str, *, profile: str) -> str:
 
 def _copy_resource(resource: dict[str, Any]) -> dict[str, Any]:
     return copy.deepcopy(resource)
+
+
+def _chunk_dict(
+    values: dict[str, dict[str, Any]], batch_size: int
+) -> Iterable[dict[str, dict[str, Any]]]:
+    items = list(values.items())
+    size = max(1, batch_size)
+    for index in range(0, len(items), size):
+        yield dict(items[index : index + size])
+
+
+def _chunk_list(values: list[str], batch_size: int) -> Iterable[list[str]]:
+    size = max(1, batch_size)
+    for index in range(0, len(values), size):
+        yield values[index : index + size]
 
 
 def durable_resource_representations_enabled() -> bool:
@@ -232,7 +258,7 @@ async def store_durable_resource_representations(
     if not durable_resource_representations_enabled():
         return False
 
-    rows = []
+    rows: list[dict[str, Any]] = []
     source_updated_at_by_id = source_updated_at_by_id or {}
     for resource_id, resource in resources_by_id.items():
         if not resource_id or not isinstance(resource, dict):
@@ -253,22 +279,24 @@ async def store_durable_resource_representations(
     if not rows:
         return False
 
-    stmt = pg_insert(generated_resource_representations).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        constraint="uq_generated_resource_representations_identity",
-        set_={
-            "payload": stmt.excluded.payload,
-            "payload_hash": stmt.excluded.payload_hash,
-            "payload_byte_size": stmt.excluded.payload_byte_size,
-            "source_updated_at": stmt.excluded.source_updated_at,
-            "generated_at": func.now(),
-        },
-    )
-
     try:
         async with async_session_factory() as session:
             async with session.begin():
-                await session.execute(stmt)
+                size = max(1, RESOURCE_REPRESENTATION_BULK_STORE_BATCH_SIZE)
+                for index in range(0, len(rows), size):
+                    row_batch = rows[index : index + size]
+                    stmt = pg_insert(generated_resource_representations).values(row_batch)
+                    stmt = stmt.on_conflict_do_update(
+                        constraint="uq_generated_resource_representations_identity",
+                        set_={
+                            "payload": stmt.excluded.payload,
+                            "payload_hash": stmt.excluded.payload_hash,
+                            "payload_byte_size": stmt.excluded.payload_byte_size,
+                            "source_updated_at": stmt.excluded.source_updated_at,
+                            "generated_at": func.now(),
+                        },
+                    )
+                    await session.execute(stmt)
         return True
     except Exception as exc:
         logger.warning("Failed to bulk persist durable resource representations: %s", exc)
@@ -285,25 +313,90 @@ async def delete_durable_resource_representations(
     if not durable_resource_representations_enabled():
         return False
 
-    stmt = delete(generated_resource_representations)
     ids = list(
         dict.fromkeys(str(resource_id) for resource_id in (resource_ids or []) if resource_id)
     )
-    if ids:
-        stmt = stmt.where(generated_resource_representations.c.resource_id.in_(ids))
-    if profile:
-        stmt = stmt.where(generated_resource_representations.c.profile == profile)
-    if version:
-        stmt = stmt.where(generated_resource_representations.c.version == version)
+
+    def delete_stmt(batch_ids: list[str] | None = None):
+        stmt = delete(generated_resource_representations)
+        if batch_ids:
+            stmt = stmt.where(generated_resource_representations.c.resource_id.in_(batch_ids))
+        if profile:
+            stmt = stmt.where(generated_resource_representations.c.profile == profile)
+        if version:
+            stmt = stmt.where(generated_resource_representations.c.version == version)
+        return stmt
 
     try:
         async with async_session_factory() as session:
             async with session.begin():
-                await session.execute(stmt)
+                if ids:
+                    for batch_ids in _chunk_list(ids, RESOURCE_REPRESENTATION_DELETE_BATCH_SIZE):
+                        await session.execute(delete_stmt(batch_ids))
+                else:
+                    await session.execute(delete_stmt())
         return True
     except Exception as exc:
         logger.warning("Failed to delete durable resource representations: %s", exc)
         return False
+
+
+async def delete_redis_resource_representations(
+    resource_ids: Iterable[str] | None = None,
+    *,
+    profile: str | None = None,
+    cache_service: CacheService | None = None,
+) -> int:
+    """Delete Redis resource representations, including older untagged entries."""
+    cache_service = cache_service or CacheService()
+    if not getattr(cache_service, "_redis_client", None):
+        return 0
+
+    profiles = (profile,) if profile else RESOURCE_REPRESENTATION_PROFILES
+    ids = list(
+        dict.fromkeys(str(resource_id) for resource_id in (resource_ids or []) if resource_id)
+    )
+
+    deleted = 0
+    try:
+        if ids:
+            for resource_id in ids:
+                for profile_name in profiles:
+                    key = resource_representation_cache_key(resource_id, profile=profile_name)
+                    deleted += int(await _redis_call(cache_service._redis_client.delete(key)))
+            return deleted
+
+        pattern = f"{CACHE_ROOT}:{RESOURCE_REPRESENTATION_NAMESPACE}:*"
+        async for key in cache_service._redis_client.scan_iter(match=pattern, count=500):
+            deleted += int(await _redis_call(cache_service._redis_client.delete(key)))
+        return deleted
+    except Exception as exc:
+        logger.warning("Failed to delete Redis resource representations: %s", exc)
+        return deleted
+
+
+async def delete_resource_representations(
+    resource_ids: Iterable[str] | None = None,
+    *,
+    profile: str | None = None,
+    version: str | None = None,
+    cache_service: CacheService | None = None,
+) -> dict[str, Any]:
+    """Delete durable and Redis resource representation caches."""
+    durable_deleted = await delete_durable_resource_representations(
+        resource_ids,
+        profile=profile,
+        version=version,
+    )
+    redis_deleted = await delete_redis_resource_representations(
+        resource_ids,
+        profile=profile,
+        cache_service=cache_service,
+    )
+    return {
+        "durable_deleted": durable_deleted,
+        "redis_deleted": redis_deleted,
+    }
 
 
 async def get_cached_resource_representations(
@@ -401,18 +494,24 @@ async def store_resource_representations(
         return
 
     cache_service = cache_service or CacheService()
-    if write_durable:
-        await store_durable_resource_representations(
-            valid_payloads,
+    for payload_batch in _chunk_dict(valid_payloads, RESOURCE_REPRESENTATION_BULK_STORE_BATCH_SIZE):
+        if write_durable:
+            batch_source_updated_at = {
+                resource_id: source_updated_at
+                for resource_id, source_updated_at in (source_updated_at_by_id or {}).items()
+                if resource_id in payload_batch
+            }
+            await store_durable_resource_representations(
+                payload_batch,
+                profile=profile,
+                source_updated_at_by_id=batch_source_updated_at,
+            )
+        await _store_redis_resource_representations(
+            payload_batch,
             profile=profile,
-            source_updated_at_by_id=source_updated_at_by_id,
+            cache_service=cache_service,
+            ttl=ttl,
         )
-    await _store_redis_resource_representations(
-        valid_payloads,
-        profile=profile,
-        cache_service=cache_service,
-        ttl=ttl,
-    )
 
 
 async def get_or_build_resource_representation(

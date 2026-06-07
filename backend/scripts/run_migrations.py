@@ -11,10 +11,17 @@ from db.migrations.backfill_resources_from_legacy_items import (
 from db.migrations.create_ai_enrichments import create_ai_enrichments_table
 from db.migrations.create_fast_embeddings import create_fast_embeddings_table
 from db.migrations.create_gazetteer_tables import create_gazetteer_tables
+from db.migrations.create_generated_resource_representations_table import (
+    create_generated_resource_representations_table,
+)
+from db.migrations.create_generated_visual_assets_table import create_generated_visual_assets_table
 from db.migrations.create_item_allmaps_table import create_item_allmaps_table
 from db.migrations.create_ogm_harvest_tables import create_ogm_harvest_tables
-from db.migrations.create_resource_spatial_facets_table import create_resource_spatial_facets_table
 from db.migrations.create_resource_relationships import create_relationships_table
+from db.migrations.create_resource_spatial_facets_table import create_resource_spatial_facets_table
+from db.migrations.create_resource_thumbnail_state_table import (
+    create_resource_thumbnail_state_table,
+)
 from db.migrations.rename_ai_enrichments import rename_ai_enrichments_table
 from db.migrations.rename_all_item_tables import rename_all_item_tables
 from db.migrations.rename_document_id_to_item_id import rename_document_id_to_item_id
@@ -56,6 +63,16 @@ def run_migrations():
         # Create spatial facets table used by search/indexing when available
         logger.info("Creating resource spatial facets table...")
         create_resource_spatial_facets_table()
+
+        # Durable generated caches used by the cache priming jobs and runtime rehydration.
+        logger.info("Creating generated resource/API response cache tables...")
+        create_generated_resource_representations_table()
+
+        logger.info("Creating generated visual asset cache tables...")
+        create_generated_visual_assets_table()
+
+        logger.info("Creating resource thumbnail state table...")
+        create_resource_thumbnail_state_table()
 
         # Backfill from legacy production `items` table when both schemas exist.
         # This keeps the new backend usable on older deployments without

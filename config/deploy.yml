@@ -43,6 +43,10 @@ env:
     LOG_LEVEL:             DEBUG
     ENDPOINT_CACHE:        "true"
     GAZETTEER_CACHE_TTL:   "3600"
+    RESOURCE_REPRESENTATION_DURABLE_STORE: database
+    API_RESPONSE_DURABLE_CACHE_STORE: database
+    VISUAL_ASSET_DURABLE_STORE: database
+    VISUAL_ASSET_CACHE_TTL_SECONDS: "0"
     ENABLE_FAST_EMBEDDINGS: "false"
     ENABLE_APPSIGNAL:      "false"
     APP_MODE:              production

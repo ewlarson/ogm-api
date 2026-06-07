@@ -6,17 +6,12 @@ from typing import Dict, Iterable, List, Optional, Sequence
 
 from sqlalchemy import Select, select
 from sqlalchemy.engine import Row
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.config import DATABASE_URL
 from db.models import distribution_types, resource_distributions
+from db.session import async_session as app_async_session
 
-# Use a non-pooling engine to avoid sharing connections with other async DB clients
-# (e.g., the `databases` library) which can lead to "another operation is in progress".
-engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
-async_session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session_factory = app_async_session
 
 
 @dataclass(frozen=True)
@@ -87,17 +82,15 @@ async def fetch_distributions_for_resources(
     if owns_session:
         async with async_session_factory() as session:
             try:
-                async with session.begin():
-                    result = await session.execute(stmt)
-                    rows = result.fetchall()
+                result = await session.execute(stmt)
+                rows = result.fetchall()
             except Exception:
                 # Gracefully degrade to no distributions if DB access fails
                 return {}
     else:
         try:
-            async with session.begin():
-                result = await session.execute(stmt)
-                rows = result.fetchall()
+            result = await session.execute(stmt)
+            rows = result.fetchall()
         except Exception:
             # Gracefully degrade to no distributions if DB access fails
             return {}
