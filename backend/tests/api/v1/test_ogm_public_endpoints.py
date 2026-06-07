@@ -35,6 +35,45 @@ def test_public_ogm_repos_endpoint_returns_repo_summaries():
     assert data["repos"] == sample_repos
 
 
+def test_public_ogm_repo_dashboard_renders_html_monitor():
+    sample_repos = [
+        {
+            "ogm_repo_name": "edu.utexas",
+            "ogm_repo_full_name": "OpenGeoMetadata/edu.utexas",
+            "ogm_github_url": "https://github.com/OpenGeoMetadata/edu.utexas",
+            "ogm_enabled": True,
+            "ogm_watch_mode": "nightly",
+            "ogm_has_aardvark": True,
+            "last_commit_at": "2026-02-26T03:15:16Z",
+            "last_commit_sha": "abc123def4567890",
+            "last_crawl_started_at": "2026-02-25T14:57:16.327086",
+            "last_crawl_completed_at": "2026-02-25T14:58:11.946192",
+            "last_crawl_status": "success",
+            "last_run_id": 142,
+            "harvested_success_count": 876,
+            "harvested_failure_count": 0,
+            "harvested_record_count": 904,
+            "available_record_count": 901,
+            "unpublished_record_count": 3,
+        }
+    ]
+
+    with patch(
+        "app.api.v1.endpoint_modules.ogm.ogm_repo.list_public_repo_summaries",
+        new_callable=AsyncMock,
+    ) as mock_summaries:
+        mock_summaries.return_value = sample_repos
+        response = client.get("/api/v1/ogm/repos/dashboard")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/html; charset=utf-8"
+    assert "OGM Repository Monitor" in response.text
+    assert "edu.utexas" in response.text
+    assert "OpenGeoMetadata/edu.utexas" in response.text
+    assert "/api/v1/ogm/repos" in response.text
+    assert "3 unpublished" in response.text
+
+
 def test_public_ogm_failures_endpoint_lists_failed_runs():
     sample_failures = [
         {
