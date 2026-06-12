@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.utils import (
     _hot_resource_class_icon_url,
     _hot_static_map_url,
+    _reference_static_map_url,
     add_citations,
     add_thumbnail_url,
     add_ui_attributes,
@@ -200,6 +201,38 @@ class TestAddThumbnailUrl:
 
 
 class TestHotVisualAssetUrls:
+    def test_reference_static_map_url_uses_schema_has_map_without_geometry(self):
+        url = "https://maps.example.edu/static/no-geometry.png"
+        resource = {
+            "id": "resource-1",
+            "dct_references_s": f'{{"http://schema.org/hasMap": "{url}"}}',
+        }
+
+        assert _reference_static_map_url(resource) == url
+
+    def test_reference_static_map_url_prefers_distribution_has_map_over_legacy_reference(self):
+        distribution_url = "https://maps.example.edu/static/distribution.png"
+        legacy_url = "https://maps.example.edu/static/legacy.png"
+        distribution_context = SimpleNamespace(
+            by_uri={
+                "http://schema.org/hasMap": [
+                    SimpleNamespace(url=distribution_url),
+                ]
+            }
+        )
+        resource = {
+            "id": "resource-1",
+            "dct_references_s": f'{{"http://schema.org/hasMap": "{legacy_url}"}}',
+        }
+
+        assert (
+            _reference_static_map_url(
+                resource,
+                distribution_context=distribution_context,
+            )
+            == distribution_url
+        )
+
     def test_hot_static_map_url_rehydrates_alias_without_redis_asset_body(self):
         class FakeStaticMapService:
             def __init__(self):

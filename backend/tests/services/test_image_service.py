@@ -4,6 +4,7 @@ Tests for ImageService - comprehensive coverage using real fixtures and data.
 
 import hashlib
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -330,6 +331,28 @@ class TestImageServiceThumbnailSourceURL:
             }
             result = service._get_thumbnail_source_url(references)
             assert result == "https://example.com/thumb.jpg"
+        except Exception as e:
+            assert _is_redis_connection_error(e)
+
+    def test_get_thumbnail_source_url_prefers_distribution_thumbnail_over_dct_references(self):
+        """Use legacy thumbnailUrl only after distribution-derived thumbnail sources."""
+        distribution_url = "https://example.com/distribution-thumb.jpg"
+        legacy_url = "https://example.com/legacy-thumb.jpg"
+        metadata = {
+            "id": "test-doc",
+            "dct_references_s": json.dumps({"http://schema.org/thumbnailUrl": legacy_url}),
+        }
+        distribution_context = SimpleNamespace(
+            by_uri={
+                "http://schema.org/thumbnailUrl": [
+                    SimpleNamespace(url=distribution_url),
+                ]
+            }
+        )
+
+        try:
+            service = ImageService(metadata, distribution_context=distribution_context)
+            assert service._get_thumbnail_source_url() == distribution_url
         except Exception as e:
             assert _is_redis_connection_error(e)
 
@@ -852,6 +875,10 @@ class TestImageServiceThumbnailURL:
                 "app.services.image_service.thumbnail_alias_service.get_hash_sync",
                 return_value=image_hash,
             ),
+            patch(
+                "app.services.image_service.thumbnail_state_service.get_state_sync",
+                return_value=None,
+            ),
             patch.object(
                 ImageService,
                 "_candidate_cached_thumbnail_hash_sync",
@@ -957,6 +984,30 @@ class TestImageServiceThumbnailURL:
             # by_uri is empty (no distribution_context records); should use dct_references_s
             source = service._get_thumbnail_source_url()
             assert source == manifest_url
+        except Exception as e:
+            assert _is_redis_connection_error(e)
+
+    def test_get_thumbnail_source_url_checks_dct_references_when_distributions_exist(self):
+        """Fallback to dct_references_s if distribution rows lack a thumbnail reference."""
+        thumbnail_url = "https://images.example.edu/resource-thumb.jpg"
+        metadata = {
+            "id": "resource-with-distributions",
+            "dct_references_s": json.dumps(
+                {"http://schema.org/thumbnailUrl": thumbnail_url}
+            ),
+        }
+        distribution_context = SimpleNamespace(
+            by_uri={
+                "http://schema.org/url": [
+                    SimpleNamespace(url="https://catalog.example.edu/resource")
+                ]
+            }
+        )
+
+        try:
+            service = ImageService(metadata, distribution_context=distribution_context)
+            source = service._get_thumbnail_source_url()
+            assert source == thumbnail_url
         except Exception as e:
             assert _is_redis_connection_error(e)
 

@@ -882,6 +882,9 @@ class ImageService:
             records = self.by_uri.get(uri, [])
             if records:
                 return records[0].url
+            legacy_references = self._parse_legacy_references()
+            if legacy_references:
+                return self._first_url(uri, references=legacy_references)
         else:
             # If explicit references are provided, consult those first
             val = references.get(uri)
@@ -923,6 +926,9 @@ class ImageService:
             for records in self.by_uri.values():
                 for record in records:
                     urls.append(record.url)
+            legacy_references = self._parse_legacy_references()
+            if legacy_references:
+                urls.extend(self._all_reference_urls(references=legacy_references))
         return urls
 
     def _queue_thumbnail_processing(self, thumbnail_url: str, doc_id: str) -> None:
