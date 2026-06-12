@@ -38,6 +38,7 @@ SEARCH_ALLOWED_PARAMS = [
     "include_filters[field][]",
     "exclude_filters[field][]",
     # Convenience multi-select repo filter (OGM)
+    "ogm_repo",
     "ogm_repo[]",
 ]
 
@@ -72,6 +73,7 @@ FACET_ALLOWED_PARAMS = [
     "include_filters[field][]",
     "exclude_filters[field][]",
     # Convenience multi-select repo filter (OGM)
+    "ogm_repo",
     "ogm_repo[]",
 ]
 

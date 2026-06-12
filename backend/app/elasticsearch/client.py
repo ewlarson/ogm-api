@@ -73,7 +73,13 @@ async def init_elasticsearch():
                 if "ogm_repo" not in props:
                     logger.info("Adding missing mapping field: ogm_repo")
                     await es.indices.put_mapping(
-                        index=index_name, properties={"ogm_repo": {"type": "keyword"}}
+                        index=index_name,
+                        properties={
+                            "ogm_repo": {
+                                "type": "text",
+                                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                            }
+                        },
                     )
             except Exception as e:
                 logger.warning(f"Could not ensure mappings for {index_name}: {e}")

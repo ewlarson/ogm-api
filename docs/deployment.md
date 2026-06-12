@@ -136,6 +136,12 @@ The `.kamal/secrets` file references these secrets:
 6. **GITHUB_TOKEN**: GitHub API token for nightly repo discovery and harvest orchestration
 7. **OPENAI_API_KEY** / **OPENAI_MODEL**: Optional AI feature configuration
 
+If the nightly OGM workflow fails with `GitHub API error listing repos: 401`
+and `Bad credentials`, the deployed `GITHUB_TOKEN` has expired, been revoked, or
+was copied incorrectly. Update the secret source used by `.kamal/secrets`, then
+reboot or redeploy the app containers so Kamal rewrites the host env file and the
+running web/worker/cron roles receive the new value.
+
 ### Nightly OGM Harvest Workflow Secrets
 
 The repo also includes `.github/workflows/ogm-nightly-sync.yml`, which SSHes to the
