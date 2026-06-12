@@ -51,3 +51,15 @@ def test_normalize_record_copies_b1g_publication_state_to_publication_state():
 
     assert normalized["publication_state"] == "published"
     assert normalized["b1g_publication_state_s"] == "published"
+
+
+def test_normalize_record_injects_repo_tags():
+    importer = OGMResourceImporter()
+    record = {
+        "id": "unr-test-id",
+        "b1g_adminTags_sm": ["curated"],
+    }
+
+    normalized = importer._normalize_record(record, repo_name="edu.unr")
+
+    assert normalized["b1g_adminTags_sm"] == ["curated", "ogm_repo:edu.unr", "ogm:unr"]

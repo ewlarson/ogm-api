@@ -992,9 +992,7 @@ class TestImageServiceThumbnailURL:
         thumbnail_url = "https://images.example.edu/resource-thumb.jpg"
         metadata = {
             "id": "resource-with-distributions",
-            "dct_references_s": json.dumps(
-                {"http://schema.org/thumbnailUrl": thumbnail_url}
-            ),
+            "dct_references_s": json.dumps({"http://schema.org/thumbnailUrl": thumbnail_url}),
         }
         distribution_context = SimpleNamespace(
             by_uri={

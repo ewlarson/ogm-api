@@ -67,6 +67,7 @@ env:
     CRON_LOCAL_TIMEZONE:   America/Chicago
     OGM_TRIGGER:           nightly
     OGM_NIGHTLY_CRON_ENABLED: "false"
+    RATE_LIMIT_ENABLED: "false"
 
   secret:
     - ADMIN_USERNAME
