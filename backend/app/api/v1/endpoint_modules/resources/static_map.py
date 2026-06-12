@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.sql import select
 
 from app.services.cache_service import alias_redirect_cache_control_header
+from app.services.distribution_repository import fetch_distribution_context
 from app.services.static_map_service import StaticMapService
 from db.models import resources
 
@@ -40,6 +41,31 @@ async def get_resource_static_map(
     """Compatibility route for the geometry-overlay static map asset."""
     try:
         map_service = StaticMapService()
+        async with async_session() as session:
+            query = select(
+                resources.c.id,
+                resources.c.locn_geometry,
+                resources.c.dcat_bbox,
+                resources.c.dct_references_s,
+            ).where(resources.c.id == id)
+            result = await session.execute(query)
+            row = result.fetchone()
+
+            if not row:
+                return _svg_placeholder(title="Map unavailable", subtitle="Resource not found")
+
+        resource_dict = dict(row._mapping)
+        distribution_context = await fetch_distribution_context(id)
+        if external_static_map_url := map_service.external_static_map_url(
+            resource_dict,
+            distribution_context=distribution_context,
+        ):
+            return RedirectResponse(
+                url=external_static_map_url,
+                status_code=302,
+                headers={"Cache-Control": "no-store"},
+            )
+
         hot_map_hash = await map_service.materialize_cached_variant(
             id,
             variant=map_service.geometry_variant(),
@@ -54,18 +80,8 @@ async def get_resource_static_map(
                 },
             )
 
-        async with async_session() as session:
-            query = select(resources.c.id, resources.c.locn_geometry, resources.c.dcat_bbox).where(
-                resources.c.id == id
-            )
-            result = await session.execute(query)
-            row = result.fetchone()
-
-            if not row:
-                return _svg_placeholder(title="Map unavailable", subtitle="Resource not found")
-
-        resolved_id = str(row._mapping["id"])
-        geometry = row._mapping.get("locn_geometry") or row._mapping.get("dcat_bbox")
+        resolved_id = str(resource_dict["id"])
+        geometry = resource_dict.get("locn_geometry") or resource_dict.get("dcat_bbox")
         source_signature = map_service.geometry_signature(geometry)
         current_map_hash = await map_service.materialize_cached_variant(
             id,
@@ -122,9 +138,12 @@ async def get_resource_static_map_no_cache(
     try:
         # Fetch geometry directly
         async with async_session() as session:
-            query = select(resources.c.id, resources.c.locn_geometry, resources.c.dcat_bbox).where(
-                resources.c.id == id
-            )
+            query = select(
+                resources.c.id,
+                resources.c.locn_geometry,
+                resources.c.dcat_bbox,
+                resources.c.dct_references_s,
+            ).where(resources.c.id == id)
             result = await session.execute(query)
             row = result.fetchone()
 
@@ -132,10 +151,21 @@ async def get_resource_static_map_no_cache(
                 return _svg_placeholder(title="Map unavailable", subtitle="Resource not found")
 
             resource_dict = dict(row._mapping)
-            geometry = resource_dict.get("locn_geometry") or resource_dict.get("dcat_bbox")
+
+        map_service = StaticMapService()
+        distribution_context = await fetch_distribution_context(id)
+        if external_static_map_url := map_service.external_static_map_url(
+            resource_dict,
+            distribution_context=distribution_context,
+        ):
+            return RedirectResponse(
+                url=external_static_map_url,
+                status_code=302,
+                headers={"Cache-Control": "no-store"},
+            )
 
         # Generate map synchronously and update cache (geometry or global)
-        map_service = StaticMapService()
+        geometry = resource_dict.get("locn_geometry") or resource_dict.get("dcat_bbox")
         source_signature = map_service.geometry_signature(geometry)
         if not geometry:
             map_bytes = map_service.generate_global_map(id, source_signature=source_signature)

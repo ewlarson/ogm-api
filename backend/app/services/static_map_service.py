@@ -488,6 +488,85 @@ class StaticMapService:
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+    def external_static_map_url(
+        self,
+        resource_dict: Dict[str, Any] | None,
+        *,
+        distribution_context: Any | None = None,
+    ) -> Optional[str]:
+        """
+        Return an explicit schema.org hasMap URL.
+
+        Structured distribution rows are authoritative. Legacy dct_references_s
+        is only a fallback for resources that do not have a distribution-derived
+        hasMap URL.
+        """
+        for key in ("http://schema.org/hasMap", "https://schema.org/hasMap"):
+            if url := self._first_distribution_url(distribution_context, key):
+                return url
+
+        references = self._parse_reference_payload(resource_dict)
+        if not references:
+            return None
+
+        for key in ("http://schema.org/hasMap", "https://schema.org/hasMap"):
+            if url := self._first_reference_url(references, key):
+                return url
+        return None
+
+    def _parse_reference_payload(
+        self, resource_dict: Dict[str, Any] | None
+    ) -> Optional[Dict[str, Any]]:
+        if not resource_dict:
+            return None
+        raw = resource_dict.get("dct_references_s")
+        if not raw:
+            return None
+        if isinstance(raw, dict):
+            references = raw
+        elif isinstance(raw, str):
+            try:
+                references = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        else:
+            return None
+        return references if isinstance(references, dict) else None
+
+    def _first_reference_url(self, references: Dict[str, Any], uri: str) -> Optional[str]:
+        value = references.get(uri)
+        return self._clean_external_static_map_url(self._reference_url_value(value))
+
+    def _first_distribution_url(self, distribution_context: Any | None, uri: str) -> Optional[str]:
+        if not distribution_context:
+            return None
+        records_by_uri = getattr(distribution_context, "by_uri", {}) or {}
+        records = records_by_uri.get(uri, [])
+        for record in records:
+            if url := self._clean_external_static_map_url(getattr(record, "url", None)):
+                return url
+        return None
+
+    def _reference_url_value(self, value: Any) -> Optional[str]:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            candidate = value.get("url") or value.get("@id") or value.get("id")
+            return candidate if isinstance(candidate, str) else None
+        if isinstance(value, list):
+            for item in value:
+                if candidate := self._reference_url_value(item):
+                    return candidate
+        return None
+
+    def _clean_external_static_map_url(self, url: Optional[str]) -> Optional[str]:
+        if not isinstance(url, str):
+            return None
+        cleaned = url.strip()
+        if cleaned.startswith(("http://", "https://")):
+            return cleaned
+        return None
+
     def get_asset_hash_sync(
         self,
         resource_id: str,

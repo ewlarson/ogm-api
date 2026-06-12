@@ -17,6 +17,51 @@ def _thumbnail_url(item, distribution_context=None, hot_only=False):
     return {**item, "ui_thumbnail_url": "https://images.example.edu/res-1-thumb.jpg"}
 
 
+def test_resource_presenter_static_map_uses_schema_has_map_without_geometry():
+    presenter = ResourcePresenter(session=None)
+    external_map_url = "https://maps.example.edu/static/res-1.png"
+    resource = {}
+
+    presenter._attach_static_map(
+        resource,
+        {
+            "id": "res-1",
+            "dct_references_s": f'{{"http://schema.org/hasMap": "{external_map_url}"}}',
+            "locn_geometry": None,
+            "dcat_bbox": None,
+        },
+    )
+
+    assert resource["meta"]["ui"]["static_map"] == external_map_url
+
+
+def test_resource_presenter_static_map_prefers_distribution_has_map_over_legacy_reference():
+    presenter = ResourcePresenter(session=None)
+    distribution_map_url = "https://maps.example.edu/static/distribution.png"
+    legacy_map_url = "https://maps.example.edu/static/legacy.png"
+    distribution_context = SimpleNamespace(
+        by_uri={
+            "http://schema.org/hasMap": [
+                SimpleNamespace(url=distribution_map_url),
+            ]
+        }
+    )
+    resource = {}
+
+    presenter._attach_static_map(
+        resource,
+        {
+            "id": "res-1",
+            "dct_references_s": f'{{"http://schema.org/hasMap": "{legacy_map_url}"}}',
+            "locn_geometry": None,
+            "dcat_bbox": None,
+        },
+        distribution_context=distribution_context,
+    )
+
+    assert resource["meta"]["ui"]["static_map"] == distribution_map_url
+
+
 @pytest.mark.asyncio
 async def test_resource_presenter_full_profile_contract_snapshot():
     presenter = ResourcePresenter(session=None)

@@ -7,6 +7,8 @@ Tests for static map endpoints.
 """
 
 import io
+import json
+from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -47,6 +49,7 @@ def create_static_map_service_mock(*, basemap_bytes=None, geometry_bytes=None) -
     svc.geometry_variant.return_value = "geometry"
     svc.geometry_signature.return_value = "geometry-signature"
     svc.centered_basemap_signature.return_value = "centered-signature"
+    svc.external_static_map_url.return_value = None
     return svc
 
 
@@ -61,6 +64,16 @@ def app():
 @pytest.fixture
 def client(app):
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def resource_static_map_distribution_context():
+    mock_fetch = AsyncMock(return_value=SimpleNamespace(by_uri={}))
+    with patch(
+        "app.api.v1.endpoint_modules.resources.static_map.fetch_distribution_context",
+        mock_fetch,
+    ):
+        yield mock_fetch
 
 
 class TestStaticMapsEndpoint:
@@ -284,19 +297,71 @@ class TestStaticMapsEndpoint:
 
 class TestResourceStaticMapEndpoint:
     @patch("app.api.v1.endpoint_modules.resources.static_map.async_session")
-    def test_resource_static_map_latest_alias_short_circuits_before_db(self, mock_session, client):
+    def test_resource_static_map_uses_schema_has_map_before_generated_alias(
+        self, mock_session, client, resource_static_map_distribution_context
+    ):
+        external_map_url = "https://maps.example.edu/static/resource.png"
+        mock_session_instance = AsyncMock()
+        mock_session.return_value.__aenter__.return_value = mock_session_instance
+
+        mock_row = MagicMock()
+        resource_payload = {
+            "id": "test-resource-id",
+            "locn_geometry": None,
+            "dcat_bbox": None,
+            "dct_references_s": json.dumps({"http://schema.org/hasMap": external_map_url}),
+        }
+        mock_row._mapping = resource_payload
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = mock_row
+        mock_session_instance.execute.return_value = mock_result
+
+        with patch("app.api.v1.endpoint_modules.resources.static_map.StaticMapService") as svc_cls:
+            svc = create_static_map_service_mock()
+            svc.external_static_map_url.return_value = external_map_url
+            svc_cls.return_value = svc
+
+            resp = client.get("/resources/test-resource-id/static-map", follow_redirects=False)
+
+            assert resp.status_code == 302
+            assert resp.headers["location"] == external_map_url
+            assert resp.headers["cache-control"] == "no-store"
+            resource_static_map_distribution_context.assert_awaited_once_with("test-resource-id")
+            svc.external_static_map_url.assert_called_once_with(
+                resource_payload,
+                distribution_context=resource_static_map_distribution_context.return_value,
+            )
+            svc.materialize_cached_variant.assert_not_awaited()
+
+    @patch("app.api.v1.endpoint_modules.resources.static_map.async_session")
+    def test_resource_static_map_latest_alias_redirects_when_no_schema_has_map(
+        self, mock_session, client
+    ):
         asset_hash = "deadbeef" * 8
+        mock_session_instance = AsyncMock()
+        mock_session.return_value.__aenter__.return_value = mock_session_instance
+
+        mock_row = MagicMock()
+        mock_row._mapping = {
+            "id": "test-resource-id",
+            "locn_geometry": "ENVELOPE(-10,10,10,-10)",
+            "dcat_bbox": "ENVELOPE(-10,10,10,-10)",
+            "dct_references_s": "{}",
+        }
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = mock_row
+        mock_session_instance.execute.return_value = mock_result
 
         with patch("app.api.v1.endpoint_modules.resources.static_map.StaticMapService") as svc_cls:
             svc = create_static_map_service_mock()
             svc.materialize_cached_variant = AsyncMock(return_value=asset_hash)
+            svc.external_static_map_url.return_value = None
             svc_cls.return_value = svc
 
             resp = client.get("/resources/test-resource-id/static-map", follow_redirects=False)
 
             assert resp.status_code == 302
             assert resp.headers["location"] == f"/api/v1/static-map-assets/{asset_hash}"
-            mock_session.assert_not_called()
             svc.materialize_cached_variant.assert_awaited_once_with(
                 "test-resource-id",
                 variant="geometry",
@@ -414,3 +479,43 @@ class TestResourceStaticMapEndpoint:
 
             assert resp.status_code == 302
             assert resp.headers["location"] == "/api/v1/static-maps/no-geometry-resource/geometry"
+
+    @patch("app.api.v1.endpoint_modules.resources.static_map.async_session")
+    def test_resource_static_map_no_cache_uses_schema_has_map(
+        self, mock_session, client, resource_static_map_distribution_context
+    ):
+        external_map_url = "https://maps.example.edu/static/no-cache.png"
+        mock_session_instance = AsyncMock()
+        mock_session.return_value.__aenter__.return_value = mock_session_instance
+
+        mock_row = MagicMock()
+        resource_payload = {
+            "id": "test-resource-id",
+            "locn_geometry": "ENVELOPE(-10,10,10,-10)",
+            "dcat_bbox": "ENVELOPE(-10,10,10,-10)",
+            "dct_references_s": json.dumps({"http://schema.org/hasMap": external_map_url}),
+        }
+        mock_row._mapping = resource_payload
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = mock_row
+        mock_session_instance.execute.return_value = mock_result
+
+        with patch("app.api.v1.endpoint_modules.resources.static_map.StaticMapService") as svc_cls:
+            svc = create_static_map_service_mock()
+            svc.external_static_map_url.return_value = external_map_url
+            svc_cls.return_value = svc
+
+            resp = client.get(
+                "/resources/test-resource-id/static-map/no-cache",
+                follow_redirects=False,
+            )
+
+            assert resp.status_code == 302
+            assert resp.headers["location"] == external_map_url
+            assert resp.headers["cache-control"] == "no-store"
+            resource_static_map_distribution_context.assert_awaited_once_with("test-resource-id")
+            svc.external_static_map_url.assert_called_once_with(
+                resource_payload,
+                distribution_context=resource_static_map_distribution_context.return_value,
+            )
+            svc.generate_map.assert_not_called()
