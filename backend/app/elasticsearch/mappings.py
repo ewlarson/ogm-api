@@ -40,7 +40,7 @@ INDEX_MAPPING = {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 8191}},
             },
-            # OpenGeoMetadata repo facet/filter (derived at index-time from b1g_adminTags_sm)
+            # OpenGeoMetadata repo facet/filter (attached from OGM state at index-time)
             "ogm_repo": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},

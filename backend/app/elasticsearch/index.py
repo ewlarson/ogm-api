@@ -18,7 +18,7 @@ from shapely.geometry import mapping as shapely_mapping
 
 from app.services.language_service import ensure_b1g_language
 from db.database import database
-from db.models import resources
+from db.models import ogm_resource_state, resources
 
 from .client import es
 from .suggest import build_suggest_inputs
@@ -125,6 +125,29 @@ def _coerce_integer_or_list(value):
     return iv if iv is not None else None
 
 
+def _coerce_ogm_repo_values(value):
+    """Normalize OGM repo values for exact faceting/filtering."""
+    if value in (None, ""):
+        return []
+    if isinstance(value, (list, tuple, set)):
+        raw_values = value
+    else:
+        raw_values = [value]
+
+    repos = []
+    seen = set()
+    for raw in raw_values:
+        text = str(raw).strip()
+        if not text:
+            continue
+        if text.startswith("ogm_repo:"):
+            text = text[len("ogm_repo:") :].strip()
+        if text and text not in seen:
+            seen.add(text)
+            repos.append(text)
+    return repos
+
+
 def _calculate_time_period_from_year(year_value):
     """Calculate the time period bucket for a given year value.
 
@@ -208,13 +231,49 @@ async def index_resources():
 
     await init_elasticsearch()
 
-    resource_rows = await database.fetch_all(resources.select())
+    resource_rows = await fetch_resources_for_index()
     processed_resources = await prepare_bulk_data(resource_rows, index_name)
 
     if processed_resources:
         return await perform_individual_indexing(processed_resources, index_name)
 
     return {"message": "No resources to index"}
+
+
+async def fetch_resources_for_index():
+    """Fetch resource rows and attach current OGM repo memberships."""
+    resource_rows = await database.fetch_all(resources.select())
+    ogm_rows = await database.fetch_all(
+        ogm_resource_state.select().with_only_columns(
+            ogm_resource_state.c.ogm_resource_id,
+            ogm_resource_state.c.ogm_repo_name,
+            ogm_resource_state.c.ogm_missing_since,
+        )
+    )
+
+    repos_by_resource_id = {}
+    resources_with_ogm_state = set()
+    for row in ogm_rows:
+        row_dict = dict(row)
+        resource_id = str(row_dict.get("ogm_resource_id") or "").strip()
+        repo_name = str(row_dict.get("ogm_repo_name") or "").strip()
+        if not resource_id or not repo_name:
+            continue
+        resources_with_ogm_state.add(resource_id)
+        if row_dict.get("ogm_missing_since") is not None:
+            continue
+        repos = repos_by_resource_id.setdefault(resource_id, [])
+        if repo_name not in repos:
+            repos.append(repo_name)
+
+    indexed_rows = []
+    for row in resource_rows:
+        resource = dict(row)
+        resource_id = str(resource.get("id"))
+        if resource_id in resources_with_ogm_state:
+            resource["ogm_repo"] = repos_by_resource_id.get(resource_id, [])
+        indexed_rows.append(resource)
+    return indexed_rows
 
 
 async def prepare_bulk_data(resources, index_name):
@@ -230,6 +289,7 @@ async def prepare_bulk_data(resources, index_name):
 async def process_resource(resource_dict):
     """Process a single resource for indexing."""
     processed_dict = {}
+    explicit_ogm_repo_field = "ogm_repo" in resource_dict
 
     date_fields = {"gbl_mdmodified_dt", "b1g_dateAccessioned_s", "b1g_dateRetired_s"}
     integer_fields = {"gbl_indexYear_im"}
@@ -240,7 +300,11 @@ async def process_resource(resource_dict):
     }
 
     for key, value in resource_dict.items():
-        if isinstance(value, (list, tuple)):
+        if key == "ogm_repo":
+            repos = _coerce_ogm_repo_values(value)
+            if repos:
+                processed_dict[key] = repos
+        elif isinstance(value, (list, tuple)):
             processed_dict[key] = list(value)
         elif key in date_fields:
             processed_dict[key] = _coerce_date(value)
@@ -294,10 +358,17 @@ async def process_resource(resource_dict):
 
     ensure_b1g_language(processed_dict)
 
-    # Derive OGM repo facet/filter field from admin tags.
+    explicit_ogm_repo_values = _coerce_ogm_repo_values(processed_dict.get("ogm_repo"))
+    if explicit_ogm_repo_values:
+        processed_dict["ogm_repo"] = explicit_ogm_repo_values
+    else:
+        processed_dict.pop("ogm_repo", None)
+
+    # Derive OGM repo facet/filter field from admin tags when no explicit
+    # repo state was attached to the index row.
     # Source-of-truth tag format stored in Postgres: "ogm_repo:<repo_name>"
     tags = processed_dict.get("b1g_adminTags_sm")
-    if tags:
+    if tags and not explicit_ogm_repo_field and "ogm_repo" not in processed_dict:
         if isinstance(tags, str):
             tags_list = [tags]
         elif isinstance(tags, list):
@@ -305,16 +376,9 @@ async def process_resource(resource_dict):
         else:
             tags_list = [str(tags)]
 
-        ogm_repo_values = []
-        seen = set()
-        for t in tags_list:
-            if not isinstance(t, str):
-                continue
-            if t.startswith("ogm_repo:"):
-                repo_name = t[len("ogm_repo:") :].strip()
-                if repo_name and repo_name not in seen:
-                    seen.add(repo_name)
-                    ogm_repo_values.append(repo_name)
+        ogm_repo_values = _coerce_ogm_repo_values(
+            [t for t in tags_list if isinstance(t, str) and t.startswith("ogm_repo:")]
+        )
         if ogm_repo_values:
             processed_dict["ogm_repo"] = ogm_repo_values
 

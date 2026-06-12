@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
@@ -30,6 +31,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 # Keep script self-contained: import the SQLAlchemy Table definitions.
 from db.models import ogm_repos
+
+_BAD_GITHUB_TOKEN_WARNING_SHOWN = False
+_REJECTED_GITHUB_TOKENS: set[str] = set()
 
 
 def _sync_database_url(database_url: str) -> str:
@@ -62,14 +66,40 @@ def _github_headers(token: Optional[str]) -> Dict[str, str]:
     return headers
 
 
+def _warn_bad_github_token() -> None:
+    global _BAD_GITHUB_TOKEN_WARNING_SHOWN
+    if _BAD_GITHUB_TOKEN_WARNING_SHOWN:
+        return
+
+    print(
+        "Warning: configured GitHub token was rejected with 401; "
+        "retrying public GitHub API requests without authentication.",
+        file=sys.stderr,
+    )
+    _BAD_GITHUB_TOKEN_WARNING_SHOWN = True
+
+
+def _github_get(url: str, token: Optional[str], **kwargs: Any) -> requests.Response:
+    effective_token = token
+    if token and token in _REJECTED_GITHUB_TOKENS:
+        effective_token = None
+
+    resp = requests.get(url, headers=_github_headers(effective_token), **kwargs)
+    if effective_token and resp.status_code == 401:
+        _REJECTED_GITHUB_TOKENS.add(effective_token)
+        _warn_bad_github_token()
+        resp = requests.get(url, headers=_github_headers(None), **kwargs)
+    return resp
+
+
 def list_org_repos(org: str, token: Optional[str], per_page: int = 100) -> List[Dict[str, Any]]:
     repos: List[Dict[str, Any]] = []
     page = 1
     while True:
         url = f"https://api.github.com/orgs/{org}/repos"
-        resp = requests.get(
+        resp = _github_get(
             url,
-            headers=_github_headers(token),
+            token,
             params={"per_page": per_page, "page": page},
             timeout=30,
         )
@@ -93,7 +123,7 @@ def repo_has_metadata_aardvark(
     params = {}
     if default_branch:
         params["ref"] = default_branch
-    resp = requests.get(url, headers=_github_headers(token), params=params, timeout=30)
+    resp = _github_get(url, token, params=params, timeout=30)
     if resp.status_code == 200:
         body = resp.json()
         return isinstance(body, list)
