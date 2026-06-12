@@ -150,6 +150,27 @@ def _build_static_map_asset_url(map_hash: str, *, kind: str | None = None) -> st
     return f"{asset_url}?kind={kind}" if kind else asset_url
 
 
+def _reference_static_map_url(
+    resource_dict: Dict[str, Any],
+    *,
+    distribution_context: DistributionContext | None = None,
+) -> Optional[str]:
+    try:
+        from app.services.static_map_service import StaticMapService
+
+        return StaticMapService().external_static_map_url(
+            resource_dict,
+            distribution_context=distribution_context,
+        )
+    except Exception as exc:
+        logger.debug(
+            "Failed resolving reference static map for %s: %s",
+            resource_dict.get("id"),
+            exc,
+        )
+        return None
+
+
 def _hot_static_map_url(resource_dict: Dict[str, Any]) -> Optional[str]:
     geometry = resource_dict.get("locn_geometry") or resource_dict.get("dcat_bbox")
     if not geometry:
