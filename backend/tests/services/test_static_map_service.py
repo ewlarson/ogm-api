@@ -1,7 +1,9 @@
+import json
 from unittest.mock import MagicMock, call, patch
 
 from app.services.static_map_service import StaticMapService
 from app.services.visual_asset_cache import cache_visual_asset
+from tests.utils.distribution_helpers import make_distribution_context, make_distribution_record
 
 
 def test_get_asset_hash_recovers_alias_from_durable_link():
@@ -182,6 +184,67 @@ def test_cache_visual_asset_waits_through_redis_loading(monkeypatch):
 
     assert cache.calls == 2
     mock_sleep.assert_called_once()
+
+
+def test_external_static_map_url_reads_schema_has_map_from_dct_references_string():
+    service = StaticMapService()
+    map_url = "https://maps.example.edu/static/res-1.png"
+    resource = {
+        "id": "resource-1",
+        "dct_references_s": json.dumps({"http://schema.org/hasMap": map_url}),
+    }
+
+    assert service.external_static_map_url(resource) == map_url
+
+
+def test_external_static_map_url_accepts_https_schema_has_map_dict_value():
+    service = StaticMapService()
+    map_url = "https://maps.example.edu/static/res-2.png"
+    resource = {
+        "id": "resource-2",
+        "dct_references_s": {"https://schema.org/hasMap": {"url": map_url}},
+    }
+
+    assert service.external_static_map_url(resource) == map_url
+
+
+def test_external_static_map_url_prefers_distribution_has_map_over_dct_references():
+    service = StaticMapService()
+    resource_id = "resource-3"
+    distribution_url = "https://maps.example.edu/static/distribution.png"
+    legacy_url = "https://maps.example.edu/static/legacy.png"
+    distribution_context = make_distribution_context(
+        resource_id,
+        [
+            make_distribution_record(
+                resource_id,
+                "http://schema.org/hasMap",
+                distribution_url,
+            )
+        ],
+    )
+    resource = {
+        "id": resource_id,
+        "dct_references_s": json.dumps({"http://schema.org/hasMap": legacy_url}),
+    }
+
+    assert (
+        service.external_static_map_url(
+            resource,
+            distribution_context=distribution_context,
+        )
+        == distribution_url
+    )
+
+
+def test_external_static_map_url_ignores_non_http_has_map_values():
+    service = StaticMapService()
+    resource = {
+        "id": "resource-4",
+        "dct_references_s": json.dumps({"http://schema.org/hasMap": "urn:not-a-url"}),
+    }
+
+    assert service.external_static_map_url(resource) is None
 
 
 def test_generate_map_uses_global_fallback_for_unrenderable_polar_extent():

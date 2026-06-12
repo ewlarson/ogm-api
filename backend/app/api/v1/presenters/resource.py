@@ -250,7 +250,11 @@ class ResourcePresenter:
             allow_resource_fallback=True,
         )
         self._attach_allmaps(resource, allmaps_attributes)
-        self._attach_static_map(resource, resource_dict)
+        self._attach_static_map(
+            resource,
+            resource_dict,
+            distribution_context=distribution_context,
+        )
 
         if include_similar_items:
             resource = await api_utils.add_similar_items_to_resource(
@@ -391,7 +395,11 @@ class ResourcePresenter:
             allow_resource_fallback=not hot_only_thumbnail_url,
         )
         self._attach_allmaps(resource, allmaps_attributes)
-        self._attach_static_map(resource, resource_dict)
+        self._attach_static_map(
+            resource,
+            resource_dict,
+            distribution_context=distribution_context,
+        )
 
         return resource
 
@@ -511,15 +519,25 @@ class ResourcePresenter:
         resource["meta"].setdefault("ui", {})
         resource["meta"]["ui"]["allmaps"] = allmaps_attributes
 
-    def _attach_static_map(self, resource: dict[str, Any], resource_dict: dict[str, Any]) -> None:
+    def _attach_static_map(
+        self,
+        resource: dict[str, Any],
+        resource_dict: dict[str, Any],
+        *,
+        distribution_context: DistributionContext | None = None,
+    ) -> None:
         api_utils = _api_utils()
-        geometry = resource_dict.get("locn_geometry") or resource_dict.get("dcat_bbox")
-        if not geometry:
-            return
-
-        static_map_url = api_utils._hot_static_map_url(
-            resource_dict
-        ) or api_utils._build_static_map_url(resource_dict["id"])
+        static_map_url = api_utils._reference_static_map_url(
+            resource_dict,
+            distribution_context=distribution_context,
+        )
+        if not static_map_url:
+            geometry = resource_dict.get("locn_geometry") or resource_dict.get("dcat_bbox")
+            if not geometry:
+                return
+            static_map_url = api_utils._hot_static_map_url(
+                resource_dict
+            ) or api_utils._build_static_map_url(resource_dict["id"])
 
         resource.setdefault("meta", {})
         resource["meta"].setdefault("ui", {})
