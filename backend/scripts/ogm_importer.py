@@ -34,6 +34,66 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def derive_repo_alias(repo_name: str) -> Optional[str]:
+    parts = [p for p in (repo_name or "").split(".") if p]
+    if len(parts) >= 2 and parts[0] == "edu":
+        return parts[1]
+    if parts:
+        return parts[0]
+    return None
+
+
+def derive_repo_name_from_path(path: str, ogm_path: Optional[str] = None) -> Optional[str]:
+    path_obj = Path(path)
+    candidate_parts = list(path_obj.parts)
+
+    if ogm_path:
+        try:
+            candidate_parts = list(
+                path_obj.resolve(strict=False)
+                .relative_to(Path(ogm_path).resolve(strict=False))
+                .parts
+            )
+        except ValueError:
+            pass
+
+    for parts in (candidate_parts, list(path_obj.parts)):
+        if "metadata-aardvark" not in parts:
+            continue
+        index = parts.index("metadata-aardvark")
+        if index > 0:
+            return parts[index - 1]
+
+    return None
+
+
+def inject_ogm_repo_tags(record: Dict[str, Any], repo_name: Optional[str]) -> Dict[str, Any]:
+    if not repo_name:
+        return record
+
+    existing = record.get("b1g_adminTags_sm")
+    tags: List[str] = []
+    if isinstance(existing, list):
+        tags.extend([str(tag).strip() for tag in existing if str(tag).strip()])
+    elif isinstance(existing, str) and existing.strip():
+        tags.append(existing.strip())
+
+    tags.append(f"ogm_repo:{repo_name}")
+    if alias := derive_repo_alias(repo_name):
+        tags.append(f"ogm:{alias}")
+
+    deduped: List[str] = []
+    seen = set()
+    for tag in tags:
+        if tag in seen:
+            continue
+        seen.add(tag)
+        deduped.append(tag)
+
+    record["b1g_adminTags_sm"] = deduped
+    return record
+
+
 class OGMImporter:
     """Imports OpenGeoMetadata Aardvark records into the database."""
 
@@ -367,6 +427,16 @@ class OGMImporter:
                             logger.warning(f"No valid ID found for record in {path}")
                             stats["skipped"] += 1
                             continue
+
+                    repo_name = derive_repo_name_from_path(path, self.ogm_path)
+                    if repo_name:
+                        inject_ogm_repo_tags(prepared_record, repo_name)
+                    else:
+                        logger.warning(
+                            "Unable to derive OGM repo name for record %s from path %s",
+                            prepared_record.get("id"),
+                            path,
+                        )
 
                     # Normalize to ensure every model column has a value (or None)
                     normalized_record = {}

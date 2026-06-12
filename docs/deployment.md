@@ -136,6 +136,12 @@ The `.kamal/secrets` file references these secrets:
 6. **GITHUB_TOKEN**: GitHub API token for nightly repo discovery and harvest orchestration
 7. **OPENAI_API_KEY** / **OPENAI_MODEL**: Optional AI feature configuration
 
+If the nightly OGM workflow fails with `GitHub API error listing repos: 401`
+and `Bad credentials`, the deployed `GITHUB_TOKEN` has expired, been revoked, or
+was copied incorrectly. Update the secret source used by `.kamal/secrets`, then
+reboot or redeploy the app containers so Kamal rewrites the host env file and the
+running web/worker/cron roles receive the new value.
+
 ### Nightly OGM Harvest Workflow Secrets
 
 The repo also includes `.github/workflows/ogm-nightly-sync.yml`, which SSHes to the
@@ -147,6 +153,18 @@ Configure these GitHub Actions secrets for that workflow:
 2. **OGM_KAMAL_SSH_PORT**: optional SSH port, defaults to `22`
 3. **OGM_KAMAL_SSH_USER**: SSH username with Docker access on the host
 4. **OGM_KAMAL_SSH_PRIVATE_KEY**: private key matching that SSH user
+
+### Kamal Cron Container
+
+Kamal also runs a `cron` role from `config/deploy.yml`. The container loads
+`config/crontab` through `backend/scripts/start_cron.sh`, which snapshots the
+container environment for cron jobs before launching `cron -f`.
+
+The OGM nightly harvest command is present in `config/crontab`, but it is gated by
+`OGM_NIGHTLY_CRON_ENABLED=false` by default because the GitHub Actions workflow
+above is currently the active nightly scheduler. To move scheduling fully into
+Kamal cron, set `OGM_NIGHTLY_CRON_ENABLED=true` and disable the scheduled
+GitHub Actions trigger so production does not enqueue duplicate harvests.
 
 ## Environment Variables
 
@@ -173,6 +191,9 @@ env:
     APP_MODE: production
     APP_ENV: production
     APPLICATION_URL: https://ogm.geo4lib.app
+    CRON_LOCAL_TIMEZONE: America/Chicago
+    OGM_TRIGGER: nightly
+    OGM_NIGHTLY_CRON_ENABLED: "false"
   
   secret:
     - ADMIN_USERNAME

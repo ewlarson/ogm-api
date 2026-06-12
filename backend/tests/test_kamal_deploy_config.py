@@ -28,3 +28,24 @@ def test_prd_secret_override_keeps_base_secrets():
         "config/deploy.prd.yml env.secret replaces the base list; "
         f"missing inherited secrets: {sorted(missing)}"
     )
+
+
+def test_kamal_cron_role_and_crontab_are_wired():
+    base_config = _load_deploy_config("config/deploy.yml")
+    cron_config = base_config["servers"]["cron"]
+    crontab = (REPO_ROOT / "config/crontab").read_text()
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text()
+
+    assert "start_cron.sh" in cron_config["cmd"]
+    assert cron_config["options"]["user"] == "root"
+    assert base_config["env"]["clear"]["OGM_NIGHTLY_CRON_ENABLED"] == "false"
+    assert "GITHUB_TOKEN" in base_config["env"]["secret"]
+
+    assert "trigger_ogm_nightly_sync.py" in crontab
+    assert "OGM_NIGHTLY_CRON_ENABLED" in crontab
+    assert "generate_sitemap.py" in crontab
+    assert "prune_generated_api_response_cache.py" in crontab
+
+    assert "cron" in dockerfile
+    assert "COPY config/crontab ./config/crontab" in dockerfile
+    assert "start_cron.sh" in dockerfile
