@@ -110,20 +110,26 @@ async def clear_thumbnail_for_resource(resource_id: str) -> bool:
     return deleted > 0
 
 
+async def clear_thumbnails_for_resources(resource_ids: list[str]) -> int:
+    """Clear thumbnail caches for all resources within one event loop."""
+    cleared = 0
+    for resource_id in resource_ids:
+        try:
+            if await clear_thumbnail_for_resource(resource_id):
+                cleared += 1
+        except Exception as exc:
+            logger.error(f"Failed for {resource_id}: {exc}")
+            raise
+    return cleared
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python scripts/clear_thumbnail_cache.py RESOURCE_ID [RESOURCE_ID ...]")
         sys.exit(1)
 
     resource_ids = sys.argv[1:]
-    cleared = 0
-    for rid in resource_ids:
-        try:
-            if asyncio.run(clear_thumbnail_for_resource(rid)):
-                cleared += 1
-        except Exception as e:
-            logger.error(f"Failed for {rid}: {e}")
-            raise
+    cleared = asyncio.run(clear_thumbnails_for_resources(resource_ids))
 
     print(f"Cleared cache for {cleared}/{len(resource_ids)} resource(s)")
 
