@@ -12,8 +12,6 @@ Usage:
 """
 
 import asyncio
-import hashlib
-import json
 import logging
 import os
 import sys
@@ -38,40 +36,10 @@ def _compute_thumbnail_image_hash(image_service, source_url: str) -> str | None:
     Compute the Redis cache key hash for any thumbnail source URL.
     Mirrors the logic in resources/thumbnail.py and worker.py.
     """
-    from app.tasks.worker import (
-        _cog_thumbnail_image_hash,
-        _pmtiles_thumbnail_image_hash,
-        _resolve_image_url,
+    return image_service.thumbnail_image_hash_for_source_sync(
+        source_url,
+        resolve_manifest=True,
     )
-
-    if image_service._is_cog_url(source_url):
-        return _cog_thumbnail_image_hash(source_url)
-    if image_service._is_pmtiles_url(source_url):
-        return _pmtiles_thumbnail_image_hash(source_url)
-    if image_service._is_manifest_url(source_url):
-        # Try manifest cache first (no network)
-        manifest_cache_key = f"manifest:{source_url}"
-        try:
-            cached = image_service.cache.get(manifest_cache_key)
-            if cached:
-                manifest_json = json.loads(cached)
-                resolved = image_service._extract_thumbnail_from_manifest_json(
-                    manifest_json, source_url
-                )
-                if resolved:
-                    resolved = image_service._standardize_iiif_url(resolved)
-                    return hashlib.sha256(resolved.encode()).hexdigest()
-        except Exception as e:
-            logger.debug(f"Manifest cache read failed: {e}")
-        # Fallback: resolve via network (same as worker)
-        resolved_url = _resolve_image_url(source_url)
-        if resolved_url != source_url:
-            return hashlib.sha256(resolved_url.encode()).hexdigest()
-        # Could not resolve manifest
-        return None
-    # Direct image URL (b1g_image_ss, schema.org thumbnail, IIIF, etc.)
-    standardized = image_service._standardize_iiif_url(source_url)
-    return hashlib.sha256(standardized.encode()).hexdigest()
 
 
 async def clear_thumbnail_for_resource(resource_id: str) -> bool:

@@ -16,6 +16,7 @@ from app.services.distribution_repository import (
     DistributionContext,
     build_distribution_context,
 )
+from app.services.iiif_url import is_iiif_info_url, is_iiif_manifest_url
 from app.services.thumbnail_alias_service import thumbnail_alias_service
 from app.services.thumbnail_queue_service import acquire_thumbnail_queue_slot
 from app.services.thumbnail_state_service import (
@@ -313,6 +314,84 @@ class ImageService:
 
         return self._extract_thumbnail_from_manifest_json(manifest_json, manifest_url)
 
+    def _iiif_thumbnail_target_edge(self) -> int:
+        """Return the requested thumbnail edge encoded in IIIF_THUMBNAIL_BOX."""
+        dimensions = [int(value) for value in re.findall(r"\d+", IIIF_THUMBNAIL_BOX)]
+        return max(dimensions, default=800)
+
+    def _is_level_zero_iiif_info(self, info_json: Dict[str, Any]) -> bool:
+        """Return True when an Image API info document advertises Level 0."""
+        profile = info_json.get("profile")
+        candidates: List[Any]
+        if isinstance(profile, list):
+            candidates = profile
+        else:
+            candidates = [profile]
+
+        for candidate in candidates:
+            if isinstance(candidate, str) and "level0" in candidate.lower():
+                return True
+            if isinstance(candidate, dict):
+                identifier = candidate.get("@id") or candidate.get("id")
+                if isinstance(identifier, str) and "level0" in identifier.lower():
+                    return True
+        return False
+
+    def _extract_thumbnail_from_iiif_info_json(
+        self,
+        info_json: Dict[str, Any],
+        info_url: str,
+    ) -> Optional[str]:
+        """Resolve a thumbnail request supported by a IIIF Image API service."""
+        service_id = info_json.get("@id") or info_json.get("id")
+        if not isinstance(service_id, str) or not service_id.strip():
+            service_id = info_url[: -len("/info.json")] if is_iiif_info_url(info_url) else None
+        if not service_id:
+            return None
+        service_id = service_id.rstrip("/")
+
+        if not self._is_level_zero_iiif_info(info_json):
+            return f"{service_id}{IIIF_THUMBNAIL_PATH}"
+
+        advertised_sizes = []
+        for size in info_json.get("sizes") or []:
+            if not isinstance(size, dict):
+                continue
+            width = size.get("width")
+            height = size.get("height")
+            if (
+                isinstance(width, int)
+                and not isinstance(width, bool)
+                and width > 0
+                and isinstance(height, int)
+                and not isinstance(height, bool)
+                and height > 0
+            ):
+                advertised_sizes.append((width, height))
+
+        if advertised_sizes:
+            target_edge = self._iiif_thumbnail_target_edge()
+            width, _height = min(
+                advertised_sizes,
+                key=lambda size: (abs(max(size) - target_edge), max(size)),
+            )
+            # Level 0 static services commonly materialize advertised sizes using
+            # the aspect-preserving width form (for example ``924,``), not an
+            # arbitrary bounded-box request such as ``!800,800``.
+            return f"{service_id}/full/{width},/0/default.jpg"
+
+        # Level 0 guarantees only a small request set. If no sizes are advertised,
+        # request the full image rather than inventing an unsupported resize.
+        return f"{service_id}/full/full/0/default.jpg"
+
+    def get_iiif_image_thumbnail(self, info_url: str) -> Optional[str]:
+        """Fetch Image API info.json and select a supported thumbnail rendition."""
+        info_json = self._get_manifest(info_url)
+        if not info_json:
+            self.logger.warning(f"Could not fetch IIIF image info {info_url}")
+            return None
+        return self._extract_thumbnail_from_iiif_info_json(info_json, info_url)
+
     def _standardize_iiif_url(self, url: str) -> str:
         """
         Standardize IIIF image URLs to ensure consistent size.
@@ -411,6 +490,28 @@ class ImageService:
                 return hashlib.sha256((COG_THUMBNAIL_PREFIX + source_url).encode()).hexdigest()
             if self._is_pmtiles_url(source_url):
                 return hashlib.sha256((PMTILES_THUMBNAIL_PREFIX + source_url).encode()).hexdigest()
+            if self._is_iiif_info_url(source_url):
+                info_cache_key = f"manifest:{source_url}"
+                cached_info_data = self.cache.get(info_cache_key)
+                if cached_info_data:
+                    info_json = json.loads(cached_info_data)
+                    resolved_url = self._extract_thumbnail_from_iiif_info_json(
+                        info_json, source_url
+                    )
+                    if resolved_url:
+                        return hashlib.sha256(
+                            (REMOTE_THUMBNAIL_PREFIX + resolved_url).encode()
+                        ).hexdigest()
+
+                if resolve_manifest:
+                    from app.tasks.worker import _resolve_image_url
+
+                    resolved_url = _resolve_image_url(source_url)
+                    if resolved_url and resolved_url != source_url:
+                        return hashlib.sha256(
+                            (REMOTE_THUMBNAIL_PREFIX + resolved_url).encode()
+                        ).hexdigest()
+                return None
             if self._is_manifest_url(source_url):
                 manifest_cache_key = f"manifest:{source_url}"
                 cached_manifest_data = self.cache.get(manifest_cache_key)
@@ -720,7 +821,12 @@ class ImageService:
                         f"https://cdm16022.contentdm.oclc.org/iiif/2/{collection_item}"
                     )
 
-            # For non-ContentDM IIIF URLs, use standard format
+            # Preserve Image API info documents for the worker. Level 0 services
+            # must be read before choosing one of their advertised static sizes.
+            if self._is_iiif_info_url(iiif_url):
+                return iiif_url
+
+            # For non-ContentDM IIIF URLs, use standard format.
             return self._standardize_iiif_url(iiif_url)
 
         # Check for IIIF Manifest - only extract URL, don't fetch manifest
@@ -729,15 +835,11 @@ class ImageService:
             "http://iiif.io/api/presentation#manifest", references=references
         ) or self._first_url("https://iiif.io/api/presentation#manifest", references=references)
 
-        # If not found, scan values for common manifest endings
+        # If not found, scan values for actual manifest path components. This
+        # intentionally excludes package metadata such as dataset_manifest.json.
         if not manifest_url:
             for value in self._all_reference_urls(references=references):
-                if (
-                    value.endswith(
-                        ("/iiif3/manifest", "/iiif/manifest", "/manifest", "manifest.json")
-                    )
-                    or "/manifest" in value
-                ):
+                if is_iiif_manifest_url(value):
                     manifest_url = value
                     break
 
@@ -762,10 +864,8 @@ class ImageService:
                     )
                     return image_url
 
-            # For other manifests, queue background resolution and return manifest URL
-            # The Celery worker will resolve the manifest and extract the image URL
-            self.logger.info(f"🚀 Queueing manifest resolution for {manifest_url}")
-            self._queue_manifest_processing(manifest_url)
+            # For other manifests, return the source without side effects. The
+            # thumbnail endpoint owns queueing so each request creates at most one job.
             return manifest_url
 
         # Use curated b1g_image_ss only after exhausting IIIF-based options.
@@ -861,20 +961,11 @@ class ImageService:
 
     def _is_manifest_url(self, url: str) -> bool:
         """Check if URL looks like a IIIF manifest URL."""
-        if not url:
-            return False
-        url_lower = url.lower()
-        # Check for common IIIF manifest patterns
-        return (
-            url.endswith(("/iiif3/manifest", "/iiif/manifest", "/manifest", "manifest.json"))
-            or "/manifest" in url
-            or (
-                ".json" in url
-                and ("iiif" in url_lower or "/object/" in url or "/collection/" in url)
-            )
-            or ("/api/" in url and ("iiif" in url_lower or "image" in url_lower))
-            or ("/cgi/i/image/api/" in url_lower)  # U of Michigan pattern
-        )
+        return is_iiif_manifest_url(url)
+
+    def _is_iiif_info_url(self, url: str) -> bool:
+        """Check if URL points to an Image API info document."""
+        return is_iiif_info_url(url)
 
     def _first_url(self, uri: str, references: Optional[Dict[str, Any]] = None) -> Optional[str]:
         # Prefer distribution context if available and no explicit references provided
@@ -969,21 +1060,6 @@ class ImageService:
 
         except Exception as e:
             self.logger.error(f"Failed to queue thumbnail processing for {doc_id}: {e}")
-            # Don't raise - this is a background operation that shouldn't fail the main request
-
-    def _queue_manifest_processing(self, manifest_url: str) -> None:
-        """
-        Queue manifest processing in the background without blocking.
-        This method is fire-and-forget.
-        """
-        try:
-            from app.tasks.worker import fetch_and_cache_image
-
-            task = fetch_and_cache_image.delay(manifest_url)
-            self.logger.info(f"Manifest resolution queued: {task.id}")
-
-        except Exception as e:
-            self.logger.error(f"Failed to queue manifest processing for {manifest_url}: {e}")
             # Don't raise - this is a background operation that shouldn't fail the main request
 
     async def get_cached_image(self, image_hash: str) -> Optional[bytes]:
