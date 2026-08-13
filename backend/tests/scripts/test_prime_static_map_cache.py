@@ -5,6 +5,18 @@ import pytest
 import scripts.prime_static_map_cache as prime_static_map_cache
 
 
+def test_resource_filters_compile_exact_resource_class_and_provider():
+    statement = prime_static_map_cache._apply_resource_filters(
+        prime_static_map_cache.select(prime_static_map_cache.resources),
+        resource_class="Maps",
+        provider="OpenGeoMetadata",
+    )
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "'Maps' = ANY" in compiled
+    assert "schema_provider_s = 'OpenGeoMetadata'" in compiled
+
+
 def test_prime_static_maps_reuses_signature_aware_durable_cache():
     service = MagicMock()
     service.geometry_signature.return_value = "sig-123"

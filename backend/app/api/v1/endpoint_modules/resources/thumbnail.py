@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.sql import select
 
 from app.api.v1.utils import _get_thumbnail_asset_url, sanitize_for_json
+from app.services.access_policy import is_restricted_resource
 from app.services.cache_service import alias_redirect_cache_control_header
 from app.services.distribution_repository import fetch_distribution_context
 from app.services.iiif_url import is_iiif_info_url
@@ -21,13 +22,16 @@ from app.services.thumbnail_queue_service import acquire_thumbnail_queue_slot
 from app.services.thumbnail_state_service import (
     ThumbnailState,
     ThumbnailStatePayload,
+    infer_source_type,
     safe_record_thumbnail_state,
 )
 from app.tasks.worker import (
     _generate_cog_thumbnail_bytes,
+    _generate_pdf_thumbnail_bytes,
     _generate_pmtiles_thumbnail_bytes,
     _normalize_thumbnail_image,
     generate_cog_thumbnail,
+    generate_pdf_thumbnail,
     generate_pmtiles_thumbnail,
 )
 from db.models import resources
@@ -448,7 +452,7 @@ async def _get_resource_thumbnail_response(
         raise HTTPException(status_code=404, detail="Resource not found")
 
     # Check for restricted access rights
-    if resource_dict.get("dct_accessrights_s") == "Restricted":
+    if is_restricted_resource(resource_dict):
         await safe_record_thumbnail_state(
             ThumbnailStatePayload(
                 resource_id=id,
@@ -499,6 +503,8 @@ async def _get_resource_thumbnail_response(
                         if image_service._is_cog_url(source_url)
                         else "pmtiles"
                         if image_service._is_pmtiles_url(source_url)
+                        else "pdf"
+                        if infer_source_type(source_url) == "pdf"
                         else "manifest"
                         if image_service._is_manifest_url(source_url)
                         else "remote"
@@ -536,6 +542,7 @@ async def _get_resource_thumbnail_response(
         and not is_iiif_info_url(source_url)
         and not image_service._is_cog_url(source_url)
         and not image_service._is_pmtiles_url(source_url)
+        and infer_source_type(source_url) != "pdf"
         and THUMBNAIL_REQUEST_PROBE_ENABLED
     ):
         fetch_url = image_service._standardize_iiif_url(source_url)
@@ -608,6 +615,31 @@ async def _get_resource_thumbnail_response(
                         state_detail="PMTiles thumbnail generation already queued",
                     )
                 )
+        elif infer_source_type(source_url) == "pdf":
+            if acquire_thumbnail_queue_slot(id, source_url):
+                task = generate_pdf_thumbnail.delay(source_url, id)
+                await safe_record_thumbnail_state(
+                    ThumbnailStatePayload(
+                        resource_id=id,
+                        state=ThumbnailState.QUEUED,
+                        source_type="pdf",
+                        source_url=source_url,
+                        source_hash=image_hash,
+                        queue_task_id=task.id,
+                        state_detail="Queued PDF first-page thumbnail generation",
+                    )
+                )
+            else:
+                await safe_record_thumbnail_state(
+                    ThumbnailStatePayload(
+                        resource_id=id,
+                        state=ThumbnailState.QUEUED,
+                        source_type="pdf",
+                        source_url=source_url,
+                        source_hash=image_hash,
+                        state_detail="PDF thumbnail generation already queued",
+                    )
+                )
         elif image_service._is_manifest_url(source_url) or is_iiif_info_url(source_url):
             image_service._queue_thumbnail_processing(source_url, id)
         else:
@@ -625,6 +657,8 @@ async def _get_resource_thumbnail_response(
                     if image_service._is_cog_url(source_url)
                     else "pmtiles"
                     if image_service._is_pmtiles_url(source_url)
+                    else "pdf"
+                    if infer_source_type(source_url) == "pdf"
                     else "manifest"
                     if image_service._is_manifest_url(source_url)
                     else "remote"
@@ -701,7 +735,7 @@ async def get_resource_thumbnail_no_cache(
 
             resource_dict = sanitize_for_json(dict(row._mapping))
 
-        if resource_dict.get("dct_accessrights_s") == "Restricted":
+        if is_restricted_resource(resource_dict):
             return _svg_placeholder(title="Thumbnail unavailable", subtitle="Restricted resource")
 
         distribution_context = await fetch_distribution_context(id)
@@ -743,6 +777,21 @@ async def get_resource_thumbnail_no_cache(
                     media_type=normalized_type,
                     headers={"Cache-Control": "no-store"},
                 )
+            return await _svg_icon_for_resource(resource_dict, variant=variant)
+
+        # For PDF maps: render the first page synchronously for diagnostics.
+        if infer_source_type(source_url) == "pdf":
+            image_bytes = await asyncio.to_thread(_generate_pdf_thumbnail_bytes, source_url)
+            if image_bytes:
+                normalized_bytes, normalized_type = _normalize_thumbnail_image(
+                    image_bytes, "image/png"
+                )
+                if normalized_bytes and normalized_type:
+                    return Response(
+                        content=normalized_bytes,
+                        media_type=normalized_type,
+                        headers={"Cache-Control": "no-store"},
+                    )
             return await _svg_icon_for_resource(resource_dict, variant=variant)
 
         # Resolve IIIF metadata to an actual image URL when needed.

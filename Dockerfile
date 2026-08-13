@@ -12,6 +12,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libcairo2-dev \
     gdal-bin \
     libgdal-dev \
+    poppler-utils \
     curl \
     ca-certificates \
     cron \

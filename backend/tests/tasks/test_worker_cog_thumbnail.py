@@ -168,6 +168,8 @@ class TestGenerateCogThumbnailTask:
 
         with (
             patch("app.tasks.worker.redis_client") as mock_redis,
+            patch("app.tasks.worker.store_durable_visual_asset", return_value=True),
+            patch("app.tasks.worker.store_durable_visual_asset_link", return_value=True),
             patch(
                 "app.tasks.worker._generate_cog_thumbnail_bytes",
                 return_value=png_bytes,

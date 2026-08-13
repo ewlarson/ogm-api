@@ -62,6 +62,8 @@ def test_fetch_and_cache_image_records_success_and_uses_provider_throttle():
     source_url = "https://example.com/thumb.png"
     response = MagicMock()
     response.status_code = 200
+    response.is_redirect = False
+    response.is_permanent_redirect = False
     response.content = _valid_png_bytes()
     response.headers = {"Content-Type": "image/png"}
     response.raise_for_status = MagicMock()
@@ -69,6 +71,12 @@ def test_fetch_and_cache_image_records_success_and_uses_provider_throttle():
     with (
         patch("app.tasks.worker._resolve_image_url", return_value=source_url),
         patch("app.tasks.worker.redis_client") as mock_redis,
+        patch("app.tasks.worker.store_durable_visual_asset", return_value=True),
+        patch("app.tasks.worker.store_durable_visual_asset_link", return_value=True),
+        patch(
+            "app.services.remote_fetch.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 443))],
+        ),
         patch("app.tasks.worker.requests.get", return_value=response),
         patch(
             "app.tasks.worker.provider_request_slot",
@@ -93,6 +101,8 @@ def test_fetch_and_cache_image_records_failure_for_invalid_content():
     source_url = "https://example.com/thumb.png"
     response = MagicMock()
     response.status_code = 200
+    response.is_redirect = False
+    response.is_permanent_redirect = False
     response.content = b"<html>not an image</html>"
     response.headers = {"Content-Type": "text/html"}
     response.raise_for_status = MagicMock()
@@ -100,6 +110,12 @@ def test_fetch_and_cache_image_records_failure_for_invalid_content():
     with (
         patch("app.tasks.worker._resolve_image_url", return_value=source_url),
         patch("app.tasks.worker.redis_client") as mock_redis,
+        patch("app.tasks.worker.store_durable_visual_asset", return_value=True),
+        patch("app.tasks.worker.store_durable_visual_asset_link", return_value=True),
+        patch(
+            "app.services.remote_fetch.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 443))],
+        ),
         patch("app.tasks.worker.requests.get", return_value=response),
         patch(
             "app.tasks.worker.provider_request_slot",
@@ -123,6 +139,8 @@ def test_fetch_and_cache_image_resizes_large_remote_image_before_caching():
     source_url = "https://example.com/huge-thumb.jpg"
     response = MagicMock()
     response.status_code = 200
+    response.is_redirect = False
+    response.is_permanent_redirect = False
     response.content = _large_jpeg_bytes()
     response.headers = {"Content-Type": "image/jpeg"}
     response.raise_for_status = MagicMock()
@@ -130,6 +148,12 @@ def test_fetch_and_cache_image_resizes_large_remote_image_before_caching():
     with (
         patch("app.tasks.worker._resolve_image_url", return_value=source_url),
         patch("app.tasks.worker.redis_client") as mock_redis,
+        patch("app.tasks.worker.store_durable_visual_asset", return_value=True),
+        patch("app.tasks.worker.store_durable_visual_asset_link", return_value=True),
+        patch(
+            "app.services.remote_fetch.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 443))],
+        ),
         patch("app.tasks.worker.requests.get", return_value=response),
         patch(
             "app.tasks.worker.provider_request_slot",
@@ -157,6 +181,24 @@ def test_worker_does_not_treat_dataset_manifest_as_iiif_manifest():
     )
 
 
+def test_worker_rejects_private_thumbnail_source_without_fetching():
+    source_url = "http://127.0.0.1/private.png"
+
+    with (
+        patch("app.tasks.worker._resolve_image_url", return_value=source_url),
+        patch("app.tasks.worker.requests.get") as request_get,
+        patch("app.tasks.worker.safe_record_thumbnail_state_sync") as mock_state,
+        patch("app.tasks.worker.release_thumbnail_queue_slot"),
+    ):
+        result = fetch_and_cache_image(source_url, "resource-private")
+
+    assert result is False
+    request_get.assert_not_called()
+    payload = mock_state.call_args.args[0]
+    assert payload.state == "failure"
+    assert "unsafe or oversized" in payload.state_detail
+
+
 def test_worker_resolves_iiif_info_before_fetching_image():
     info_url = "https://example.com/iiif/item/info.json"
     image_url = "https://example.com/iiif/item/full/924,/0/default.jpg"
@@ -174,6 +216,8 @@ def test_unr_level_zero_info_worker_fetches_and_caches_real_rendition():
     """Exercise the complete raw info.json -> rendition -> image-cache worker path."""
     response = MagicMock()
     response.status_code = 200
+    response.is_redirect = False
+    response.is_permanent_redirect = False
     response.content = _valid_png_bytes()
     response.headers = {"Content-Type": "image/png"}
     response.raise_for_status = MagicMock()
@@ -184,6 +228,12 @@ def test_unr_level_zero_info_worker_fetches_and_caches_real_rendition():
             return_value=UNR_LEVEL_ZERO_INFO,
         ),
         patch("app.tasks.worker.redis_client") as mock_redis,
+        patch("app.tasks.worker.store_durable_visual_asset", return_value=True),
+        patch("app.tasks.worker.store_durable_visual_asset_link", return_value=True),
+        patch(
+            "app.services.remote_fetch.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 443))],
+        ),
         patch("app.tasks.worker.requests.get", return_value=response) as mock_get,
         patch(
             "app.tasks.worker.provider_request_slot",
@@ -200,6 +250,8 @@ def test_unr_level_zero_info_worker_fetches_and_caches_real_rendition():
             UNR_IMAGE_URL,
             timeout=30,
             headers={"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"},
+            allow_redirects=False,
+            stream=True,
         )
         image_key, cached_bytes = _cached_image_write(mock_redis)
         resolved_hash = _remote_thumbnail_image_hash(UNR_IMAGE_URL)
