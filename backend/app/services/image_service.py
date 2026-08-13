@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import aiohttp
 import redis
@@ -12,6 +13,7 @@ import requests
 from dotenv import load_dotenv
 
 from app.security_utils import url_hostname_matches
+from app.services.access_policy import is_restricted_resource
 from app.services.distribution_repository import (
     DistributionContext,
     build_distribution_context,
@@ -43,6 +45,14 @@ THUMBNAIL_CACHE_VERSION = os.getenv("THUMBNAIL_CACHE_VERSION", "v3")
 REMOTE_THUMBNAIL_PREFIX = f"remote-thumb-normalized:{THUMBNAIL_CACHE_VERSION}:"
 COG_THUMBNAIL_PREFIX = "cog-thumb:"
 PMTILES_THUMBNAIL_PREFIX = "pmtiles-thumb:"
+PDF_THUMBNAIL_PREFIX = "pdf-thumb:"
+
+DOWNLOAD_REFERENCE_URIS = (
+    "http://schema.org/downloadUrl",
+    "https://schema.org/downloadUrl",
+)
+DIRECT_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
+DIRECT_IMAGE_LABELS = ("jpeg", "jpg", "png", "gif", "webp")
 
 # Shared Redis connection pool to avoid creating new connections for each ImageService instance
 _redis_connection_pool = None
@@ -475,6 +485,70 @@ class ImageService:
             return source_url
         return self._clean_external_thumbnail_url(thumbnail_asset_url)
 
+    def _download_source_candidates(
+        self,
+        references: Optional[Dict[str, Any]] = None,
+    ) -> List[tuple[str, str]]:
+        """Return normalized ``(url, label)`` candidates from download distributions."""
+        candidates: List[tuple[str, str]] = []
+
+        if references is None:
+            for uri in DOWNLOAD_REFERENCE_URIS:
+                for record in self.by_uri.get(uri, []):
+                    url = self._clean_external_thumbnail_url(record.url)
+                    if url:
+                        candidates.append((url, str(record.label or "").strip()))
+            legacy_references = self._parse_legacy_references()
+            if legacy_references:
+                candidates.extend(self._download_source_candidates(legacy_references))
+            return candidates
+
+        for uri in DOWNLOAD_REFERENCE_URIS:
+            raw_value = references.get(uri)
+            values = raw_value if isinstance(raw_value, list) else [raw_value]
+            for value in values:
+                label = ""
+                if isinstance(value, str):
+                    raw_url = value
+                elif isinstance(value, dict):
+                    raw_url = value.get("url") or value.get("@id") or value.get("id")
+                    label = str(value.get("label") or value.get("title") or "").strip()
+                else:
+                    continue
+                url = self._clean_external_thumbnail_url(raw_url)
+                if url:
+                    candidates.append((url, label))
+        return candidates
+
+    @staticmethod
+    def _url_path_lower(url: str) -> str:
+        return urlsplit(url).path.lower()
+
+    def _download_image_source_url(
+        self,
+        references: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Return an explicitly image-bearing download URL, if one is advertised."""
+        for url, label in self._download_source_candidates(references):
+            path = self._url_path_lower(url)
+            normalized_label = label.casefold()
+            if path.endswith(DIRECT_IMAGE_EXTENSIONS) or any(
+                token == normalized_label or token in normalized_label.split()
+                for token in DIRECT_IMAGE_LABELS
+            ):
+                return url
+        return None
+
+    def _download_pdf_source_url(
+        self,
+        references: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Return a PDF download URL suitable for first-page thumbnail rendering."""
+        for url, label in self._download_source_candidates(references):
+            if self._url_path_lower(url).endswith(".pdf") or "pdf" in label.casefold().split():
+                return url
+        return None
+
     def thumbnail_image_hash_for_source_sync(
         self,
         source_url: str,
@@ -490,6 +564,8 @@ class ImageService:
                 return hashlib.sha256((COG_THUMBNAIL_PREFIX + source_url).encode()).hexdigest()
             if self._is_pmtiles_url(source_url):
                 return hashlib.sha256((PMTILES_THUMBNAIL_PREFIX + source_url).encode()).hexdigest()
+            if self._is_pdf_url(source_url):
+                return hashlib.sha256((PDF_THUMBNAIL_PREFIX + source_url).encode()).hexdigest()
             if self._is_iiif_info_url(source_url):
                 info_cache_key = f"manifest:{source_url}"
                 cached_info_data = self.cache.get(info_cache_key)
@@ -649,7 +725,7 @@ class ImageService:
         """
         try:
             # Check for restricted access rights
-            if self.metadata.get("dct_accessrights_s") == "Restricted":
+            if is_restricted_resource(self.metadata):
                 self.logger.info("Skipping thumbnail for restricted item")
                 return None
 
@@ -686,7 +762,7 @@ class ImageService:
         over a blocking thumbnail generation path.
         """
         try:
-            if self.metadata.get("dct_accessrights_s") == "Restricted":
+            if is_restricted_resource(self.metadata):
                 return None
 
             doc_id = self.metadata.get("id")
@@ -935,6 +1011,13 @@ class ImageService:
             if url := self._first_url(image_key, references=references):
                 return url
 
+        # Some OGM records expose only downloadable derivatives. Use explicit
+        # image files first, then render the first page of a PDF map when needed.
+        if download_image_url := self._download_image_source_url(references=references):
+            return download_image_url
+        if download_pdf_url := self._download_pdf_source_url(references=references):
+            return download_pdf_url
+
         # Return None when no thumbnail source is found
         # This allows the frontend to show a default icon based on resource class
         # (gbl_resourceClass_sm)
@@ -958,6 +1041,12 @@ class ImageService:
             return False
         url_lower = url.lower()
         return url_lower.endswith(".pmtiles") or ".pmtiles?" in url_lower
+
+    def _is_pdf_url(self, url: str) -> bool:
+        """Check whether a source URL points at a PDF download."""
+        if not url:
+            return False
+        return self._url_path_lower(url).endswith(".pdf")
 
     def _is_manifest_url(self, url: str) -> bool:
         """Check if URL looks like a IIIF manifest URL."""

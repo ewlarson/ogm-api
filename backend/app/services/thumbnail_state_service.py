@@ -47,6 +47,8 @@ def infer_source_type(source_url: str | None) -> str | None:
         or "display_raster" in lowered
     ):
         return "cog"
+    if urlparse(source_url).path.lower().endswith(".pdf"):
+        return "pdf"
     if is_iiif_manifest_url(source_url):
         return "manifest"
     return "remote"

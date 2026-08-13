@@ -26,8 +26,10 @@ SOURCE_ORDER = {
     "cog": 5,
     "pmtiles": 6,
     "schema_image": 7,
-    "bridge_asset": 8,
-    "no_source": 9,
+    "download_image": 8,
+    "download_pdf": 9,
+    "bridge_asset": 10,
+    "no_source": 11,
 }
 
 OUTCOME_COLUMNS = (
@@ -47,6 +49,8 @@ def _sync_database_url() -> str:
 
 
 def _scope_condition(scope: str) -> str:
+    if scope == "maps":
+        return "'Maps' = ANY(COALESCE(r.\"gbl_resourceClass_sm\", ARRAY[]::varchar[]))"
     if scope == "urban":
         return "'b1g_urbanBaseLayers' = ANY(COALESCE(r.\"pcdm_memberOf_sm\", ARRAY[]::varchar[]))"
     if scope == "iiif":
@@ -54,8 +58,17 @@ def _scope_condition(scope: str) -> str:
     return "TRUE"
 
 
-def _classified_cte(scope: str) -> str:
-    return f"""
+def _source_condition(source_bucket: str | None) -> str:
+    if source_bucket is None:
+        return "TRUE"
+    if source_bucket not in SOURCE_ORDER:
+        raise ValueError(f"Unknown thumbnail source bucket: {source_bucket}")
+    return f"source_bucket = '{source_bucket}'"
+
+
+def _classified_cte(scope: str, *, provider: str | None = None) -> str:
+    provider_condition = "AND r.schema_provider_s = :provider" if provider else ""
+    return rf"""
 WITH dist AS (
     SELECT
         rd.resource_id,
@@ -70,7 +83,7 @@ WITH dist AS (
         ) AS has_pmtiles,
         BOOL_OR(
             COALESCE(dt.distribution_uri, '') = 'https://github.com/cogeotiff/cog-spec'
-            OR COALESCE(rd.url, '') ~* '\\.tiff?(\\?|$)'
+            OR COALESCE(rd.url, '') ~* '\.tiff?(\?|$)'
             OR COALESCE(rd.url, '') ILIKE '%geotiff%'
             OR COALESCE(rd.url, '') ILIKE '%display_raster%'
         ) AS has_cog,
@@ -79,7 +92,28 @@ WITH dist AS (
             OR COALESCE(dt.distribution_uri, '') ILIKE '%/ogc/wms%'
             OR COALESCE(dt.distribution_uri, '') ILIKE '%/ogc/tms%'
             OR COALESCE(rd.url, '') ILIKE '%/arcgis/rest/services/%'
-        ) AS has_service
+        ) AS has_service,
+        BOOL_OR(
+            dt.distribution_uri IN (
+                'http://schema.org/downloadUrl',
+                'https://schema.org/downloadUrl'
+            )
+            AND (
+                COALESCE(rd.url, '') ~* '\.(jpe?g|png|gif|webp)(\?|$)'
+                OR COALESCE(rd.label, '') ~*
+                   '(^|[[:space:]])(jpe?g|png|gif|webp)([[:space:]]|$)'
+            )
+        ) AS has_download_image,
+        BOOL_OR(
+            dt.distribution_uri IN (
+                'http://schema.org/downloadUrl',
+                'https://schema.org/downloadUrl'
+            )
+            AND (
+                COALESCE(rd.url, '') ~* '\.pdf(\?|$)'
+                OR COALESCE(rd.label, '') ~* '(^|[[:space:]])pdf([[:space:]]|$)'
+            )
+        ) AS has_download_pdf
     FROM resource_distributions rd
     LEFT JOIN distribution_types dt ON dt.id = rd.distribution_type_id
     GROUP BY rd.resource_id
@@ -93,6 +127,19 @@ asset AS (
       AND NULLIF(BTRIM(file_url), '') IS NOT NULL
     GROUP BY resource_id
 ),
+icon AS (
+    SELECT
+        links.resource_id,
+        BOOL_OR(
+            visuals.byte_size > 0
+            AND visuals.content_type LIKE 'image/%'
+        ) AS has_durable_icon
+    FROM generated_visual_asset_links links
+    JOIN generated_visual_assets visuals
+      ON visuals.asset_hash = links.asset_hash
+    WHERE links.asset_kind = 'resource-class-icon'
+    GROUP BY links.resource_id
+),
 base AS (
     SELECT
         r.id,
@@ -104,7 +151,10 @@ base AS (
         COALESCE(d.has_pmtiles, false) AS has_pmtiles,
         COALESCE(d.has_cog, false) AS has_cog,
         COALESCE(d.has_service, false) AS has_service,
+        COALESCE(d.has_download_image, false) AS has_download_image,
+        COALESCE(d.has_download_pdf, false) AS has_download_pdf,
         COALESCE(asset.has_bridge_asset, false) AS has_bridge_asset,
+        COALESCE(icon.has_durable_icon, false) AS has_durable_icon,
         s.state,
         s.source_type,
         s.source_url,
@@ -117,11 +167,13 @@ base AS (
     FROM resources r
     LEFT JOIN dist d ON d.resource_id = r.id
     LEFT JOIN asset ON asset.resource_id = r.id
+    LEFT JOIN icon ON icon.resource_id = r.id
     LEFT JOIN resource_thumbnail_state s ON s.resource_id = r.id
     LEFT JOIN generated_visual_assets gva
         ON gva.asset_hash = s.source_hash
-       AND gva.asset_kind = 'thumbnail'
+       AND gva.asset_kind LIKE 'thumbnail%'
     WHERE {_scope_condition(scope)}
+      {provider_condition}
 ),
 sourced AS (
     SELECT
@@ -137,11 +189,13 @@ sourced AS (
               OR refs ILIKE '%/arcgis/rest/services/%' THEN 'service'
             WHEN has_cog
               OR refs ILIKE '%cogeotiff%'
-              OR refs ~* '\\.tiff?(\\?|")' THEN 'cog'
+              OR refs ~* '\.tiff?(\?|")' THEN 'cog'
             WHEN has_pmtiles
               OR refs ILIKE '%PMTiles%'
               OR refs ILIKE '%.pmtiles%' THEN 'pmtiles'
             WHEN refs ILIKE '%schema.org/image%' THEN 'schema_image'
+            WHEN has_download_image THEN 'download_image'
+            WHEN has_download_pdf THEN 'download_pdf'
             WHEN has_bridge_asset THEN 'bridge_asset'
             ELSE 'no_source'
         END AS source_bucket
@@ -151,7 +205,7 @@ classified AS (
     SELECT
         *,
         CASE
-            WHEN LOWER(access_rights) = 'restricted' THEN 'restricted'
+            WHEN LOWER(BTRIM(access_rights)) = 'restricted' THEN 'restricted'
             WHEN state = 'success' AND has_durable_thumbnail THEN 'success'
             WHEN state = 'success' THEN 'stale_success'
             WHEN state = 'placeheld' THEN 'placeheld'
@@ -165,19 +219,30 @@ classified AS (
 """
 
 
-def _summary_sql(scope: str) -> str:
+def _summary_sql(
+    scope: str,
+    *,
+    provider: str | None = None,
+    source_bucket: str | None = None,
+) -> str:
     outcome_counts = ",\n        ".join(
         f"COUNT(*) FILTER (WHERE outcome = '{column}')::bigint AS {column}"
         for column in OUTCOME_COLUMNS
     )
     return (
-        _classified_cte(scope)
+        _classified_cte(scope, provider=provider)
         + f"""
 SELECT
     source_bucket,
     COUNT(*)::bigint AS total,
+    COUNT(*) FILTER (WHERE outcome <> 'restricted')::bigint AS eligible,
+    COUNT(*) FILTER (
+        WHERE outcome = 'success'
+           OR (outcome <> 'restricted' AND has_durable_icon)
+    )::bigint AS gallery_ready,
     {outcome_counts}
 FROM classified
+WHERE {_source_condition(source_bucket)}
 GROUP BY source_bucket
 ORDER BY
     CASE source_bucket
@@ -188,18 +253,25 @@ ORDER BY
         WHEN 'cog' THEN 5
         WHEN 'pmtiles' THEN 6
         WHEN 'schema_image' THEN 7
-        WHEN 'bridge_asset' THEN 8
-        ELSE 9
+        WHEN 'download_image' THEN 8
+        WHEN 'download_pdf' THEN 9
+        WHEN 'bridge_asset' THEN 10
+        ELSE 11
     END,
     source_bucket;
 """
     )
 
 
-def _missing_sql(scope: str) -> str:
+def _missing_sql(
+    scope: str,
+    *,
+    provider: str | None = None,
+    source_bucket: str | None = None,
+) -> str:
     return (
-        _classified_cte(scope)
-        + """
+        _classified_cte(scope, provider=provider)
+        + f"""
 SELECT
     id,
     dct_title_s,
@@ -210,6 +282,7 @@ SELECT
     source_hash
 FROM classified
 WHERE outcome <> 'success'
+  AND {_source_condition(source_bucket)}
 ORDER BY
     CASE source_bucket
         WHEN 'iiif' THEN 1
@@ -219,8 +292,10 @@ ORDER BY
         WHEN 'cog' THEN 5
         WHEN 'pmtiles' THEN 6
         WHEN 'schema_image' THEN 7
-        WHEN 'bridge_asset' THEN 8
-        ELSE 9
+        WHEN 'download_image' THEN 8
+        WHEN 'download_pdf' THEN 9
+        WHEN 'bridge_asset' THEN 10
+        ELSE 11
     END,
     id
 LIMIT :limit;
@@ -233,21 +308,30 @@ def _rows_to_dicts(rows: list[Any]) -> list[dict[str, Any]]:
 
 
 def _total_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    total = {"source_bucket": "TOTAL", "total": 0}
+    total = {"source_bucket": "TOTAL", "total": 0, "eligible": 0, "gallery_ready": 0}
     for column in OUTCOME_COLUMNS:
         total[column] = 0
     for row in rows:
         total["total"] += int(row["total"] or 0)
+        total["eligible"] += int(row["eligible"] or 0)
+        total["gallery_ready"] += int(row["gallery_ready"] or 0)
         for column in OUTCOME_COLUMNS:
             total[column] += int(row[column] or 0)
     return total
 
 
 def _success_pct(row: dict[str, Any]) -> float:
-    total = int(row["total"] or 0)
-    if total <= 0:
+    eligible = int(row["eligible"] or 0)
+    if eligible <= 0:
         return 100.0
-    return round((int(row["success"] or 0) / total) * 100, 2)
+    return round((int(row["success"] or 0) / eligible) * 100, 2)
+
+
+def _gallery_ready_pct(row: dict[str, Any]) -> float:
+    eligible = int(row["eligible"] or 0)
+    if eligible <= 0:
+        return 100.0
+    return round((int(row["gallery_ready"] or 0) / eligible) * 100, 2)
 
 
 def _format_table(rows: list[dict[str, Any]], sample_rows: list[dict[str, Any]]) -> str:
@@ -255,6 +339,9 @@ def _format_table(rows: list[dict[str, Any]], sample_rows: list[dict[str, Any]])
     headings = [
         "source",
         "total",
+        "eligible",
+        "ready",
+        "ready%",
         "ok",
         "ok%",
         "held",
@@ -272,6 +359,9 @@ def _format_table(rows: list[dict[str, Any]], sample_rows: list[dict[str, Any]])
         rendered = {
             "source": str(row["source_bucket"]),
             "total": str(row["total"]),
+            "eligible": str(row["eligible"]),
+            "ready": str(row["gallery_ready"]),
+            "ready%": f"{_gallery_ready_pct(row):.2f}",
             "ok": str(row["success"]),
             "ok%": f"{_success_pct(row):.2f}",
             "held": str(row["placeheld"]),
@@ -301,12 +391,21 @@ def _format_table(rows: list[dict[str, Any]], sample_rows: list[dict[str, Any]])
 
 
 def _write_csv(rows: list[dict[str, Any]]) -> None:
-    fieldnames = ["source_bucket", "total", *OUTCOME_COLUMNS, "success_pct"]
+    fieldnames = [
+        "source_bucket",
+        "total",
+        "eligible",
+        "gallery_ready",
+        "gallery_ready_pct",
+        *OUTCOME_COLUMNS,
+        "success_pct",
+    ]
     writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
     writer.writeheader()
     for row in [*rows, _total_row(rows)]:
         out = dict(row)
         out["success_pct"] = _success_pct(row)
+        out["gallery_ready_pct"] = _gallery_ready_pct(row)
         writer.writerow(out)
 
 
@@ -314,8 +413,19 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Report thumbnail completeness.")
     parser.add_argument(
         "--scope",
-        choices=("all", "urban", "iiif"),
+        choices=("all", "maps", "urban", "iiif"),
         default=os.getenv("THUMBNAIL_REPORT_SCOPE", "all"),
+    )
+    parser.add_argument(
+        "--provider",
+        default=None,
+        help="Limit the report to an exact schema_provider_s value.",
+    )
+    parser.add_argument(
+        "--source-bucket",
+        choices=tuple(SOURCE_ORDER),
+        default=os.getenv("THUMBNAIL_REPORT_SOURCE_BUCKET") or None,
+        help="Limit the report to one classified thumbnail source bucket.",
     )
     parser.add_argument(
         "--format",
@@ -342,14 +452,33 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    query_params = {"provider": args.provider} if args.provider else {}
     engine = create_app_sync_engine(_sync_database_url())
     with engine.begin() as conn:
-        rows = _rows_to_dicts(conn.execute(text(_summary_sql(args.scope))).fetchall())
+        rows = _rows_to_dicts(
+            conn.execute(
+                text(
+                    _summary_sql(
+                        args.scope,
+                        provider=args.provider,
+                        source_bucket=args.source_bucket,
+                    )
+                ),
+                query_params,
+            ).fetchall()
+        )
         sample_rows: list[dict[str, Any]] = []
         if args.show_missing > 0:
             sample_rows = _rows_to_dicts(
                 conn.execute(
-                    text(_missing_sql(args.scope)), {"limit": args.show_missing}
+                    text(
+                        _missing_sql(
+                            args.scope,
+                            provider=args.provider,
+                            source_bucket=args.source_bucket,
+                        )
+                    ),
+                    {**query_params, "limit": args.show_missing},
                 ).fetchall()
             )
 
@@ -357,8 +486,21 @@ def main() -> int:
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scope": args.scope,
-        "summary": {**total, "success_pct": _success_pct(total)},
-        "by_source": [{**row, "success_pct": _success_pct(row)} for row in rows],
+        "provider": args.provider,
+        "source_bucket": args.source_bucket,
+        "summary": {
+            **total,
+            "success_pct": _success_pct(total),
+            "gallery_ready_pct": _gallery_ready_pct(total),
+        },
+        "by_source": [
+            {
+                **row,
+                "success_pct": _success_pct(row),
+                "gallery_ready_pct": _gallery_ready_pct(row),
+            }
+            for row in rows
+        ],
         "missing_sample": sample_rows,
     }
 
@@ -367,7 +509,12 @@ def main() -> int:
     elif args.format == "csv":
         _write_csv(rows)
     else:
-        print(f"thumbnail completeness | scope={args.scope}")
+        filters = [f"scope={args.scope}"]
+        if args.provider:
+            filters.append(f"provider={args.provider}")
+        if args.source_bucket:
+            filters.append(f"source={args.source_bucket}")
+        print(f"thumbnail completeness | {' | '.join(filters)}")
         print(_format_table(rows, sample_rows))
 
     if args.fail_under is not None and payload["summary"]["success_pct"] < args.fail_under:

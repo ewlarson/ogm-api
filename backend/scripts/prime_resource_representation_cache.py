@@ -84,12 +84,46 @@ def configure_logging(*, verbose: bool = False) -> None:
         handler.setLevel(level)
 
 
-async def _count_resources(resource_ids: list[str], limit: int | None) -> int:
-    if resource_ids:
+def _apply_resource_filters(stmt: Any, *, resource_class: str | None, provider: str | None) -> Any:
+    if resource_class:
+        stmt = stmt.where(resources.c.gbl_resourceClass_sm.any(resource_class))
+    if provider:
+        stmt = stmt.where(resources.c.schema_provider_s == provider)
+    return stmt
+
+
+async def _count_resources(
+    resource_ids: list[str],
+    limit: int | None,
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
+) -> int:
+    if resource_ids and not resource_class and not provider:
         return len(resource_ids[:limit] if limit else resource_ids)
+    if resource_ids:
+        async with async_session_factory() as session:
+            stmt = (
+                select(func.count())
+                .select_from(resources)
+                .where(resources.c.id.in_(resource_ids))
+            )
+            stmt = _apply_resource_filters(
+                stmt,
+                resource_class=resource_class,
+                provider=provider,
+            )
+            result = await session.execute(stmt)
+            total = int(result.scalar_one() or 0)
+            return min(total, limit) if limit else total
 
     async with async_session_factory() as session:
         stmt = select(func.count()).select_from(resources)
+        stmt = _apply_resource_filters(
+            stmt,
+            resource_class=resource_class,
+            provider=provider,
+        )
         result = await session.execute(stmt)
         total = int(result.scalar_one() or 0)
         return min(total, limit) if limit else total
@@ -110,27 +144,45 @@ async def _disconnect_legacy_database(opened: bool) -> None:
 
 
 async def _fetch_resources_by_ids(
-    resource_ids: list[str], limit: int | None
+    resource_ids: list[str],
+    limit: int | None,
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
 ) -> list[dict[str, Any]]:
     if not resource_ids:
         return []
 
     ids = resource_ids[:limit] if limit else resource_ids
     async with async_session_factory() as session:
-        stmt = select(resources).where(resources.c.id.in_(ids)).order_by(resources.c.id)
+        stmt = select(resources).where(resources.c.id.in_(ids))
+        stmt = _apply_resource_filters(
+            stmt,
+            resource_class=resource_class,
+            provider=provider,
+        ).order_by(resources.c.id)
         result = await session.execute(stmt)
         return [sanitize_for_json(dict(row._mapping)) for row in result.fetchall()]
 
 
 async def _fetch_resource_batch(
-    last_id: str | None, batch_size: int, remaining: int | None
+    last_id: str | None,
+    batch_size: int,
+    remaining: int | None,
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
 ) -> list[dict[str, Any]]:
     limit = min(batch_size, remaining) if remaining is not None else batch_size
     if limit <= 0:
         return []
 
     async with async_session_factory() as session:
-        stmt = select(resources).order_by(resources.c.id).limit(limit)
+        stmt = _apply_resource_filters(
+            select(resources),
+            resource_class=resource_class,
+            provider=provider,
+        ).order_by(resources.c.id).limit(limit)
         if last_id is not None:
             stmt = stmt.where(resources.c.id > last_id)
         result = await session.execute(stmt)
@@ -468,13 +520,20 @@ async def prime_resource_representation_cache(
     batch_size: int,
     concurrency: int,
     force: bool,
+    resource_class: str | None = None,
+    provider: str | None = None,
 ) -> Counter:
     if not ENDPOINT_CACHE:
         logger.warning("ENDPOINT_CACHE is false; cache writes will be skipped.")
 
     opened_legacy_database = await _connect_legacy_database()
     try:
-        total = await _count_resources(resource_ids, limit)
+        total = await _count_resources(
+            resource_ids,
+            limit,
+            resource_class=resource_class,
+            provider=provider,
+        )
         counters: Counter = Counter()
 
         with tqdm(
@@ -483,7 +542,12 @@ async def prime_resource_representation_cache(
             if resource_ids:
                 selected_ids = resource_ids[:limit] if limit else resource_ids
                 for resource_id_batch in _chunks(selected_ids, batch_size):
-                    batch = await _fetch_resources_by_ids(resource_id_batch, None)
+                    batch = await _fetch_resources_by_ids(
+                        resource_id_batch,
+                        None,
+                        resource_class=resource_class,
+                        provider=provider,
+                    )
                     counters.update(
                         await _prime_batch(
                             batch,
@@ -501,7 +565,13 @@ async def prime_resource_representation_cache(
             last_id = None
             remaining = limit
             while True:
-                batch = await _fetch_resource_batch(last_id, batch_size, remaining)
+                batch = await _fetch_resource_batch(
+                    last_id,
+                    batch_size,
+                    remaining,
+                    resource_class=resource_class,
+                    provider=provider,
+                )
                 if not batch:
                     break
 
@@ -527,6 +597,8 @@ async def prime_resource_representation_cache(
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prime resource representation cache entries.")
     parser.add_argument("resource_ids", nargs="*", help="Optional explicit resource IDs to prime")
+    parser.add_argument("--resource-class", help="Exact gbl_resourceClass_sm value to include")
+    parser.add_argument("--provider", help="Optional exact schema_provider_s value to include")
     parser.add_argument("--limit", type=int, help="Maximum number of resources to prime")
     parser.add_argument("--batch-size", type=int, default=500, help="Database batch size")
     parser.add_argument("--concurrency", type=int, default=16, help="Concurrent resource builders")
@@ -545,6 +617,8 @@ def main() -> int:
             batch_size=max(1, args.batch_size),
             concurrency=max(1, args.concurrency),
             force=args.force,
+            resource_class=getattr(args, "resource_class", None),
+            provider=getattr(args, "provider", None),
         )
     )
     print(

@@ -78,6 +78,7 @@ class TestOGMHarvestService:
                 run_started_at=run1_started,
             )
             assert stats1["imported"] == 2
+            assert importer.changed_thumbnail_resource_ids == {"test-ogm-a", "test-ogm-b"}
 
             # Verify tags injected
             row_a = await database.fetch_one(
@@ -112,6 +113,7 @@ class TestOGMHarvestService:
                 run_started_at=run2_started,
             )
             assert stats2["imported"] == 1
+            assert importer.changed_thumbnail_resource_ids == set()
 
             missing_rows2 = await database.fetch_all(
                 select(ogm_resource_state)
