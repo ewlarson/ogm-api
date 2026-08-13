@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.services.distribution_repository import async_session_factory
+from app.services.iiif_url import is_iiif_manifest_url
 from app.services.thumbnail_alias_service import thumbnail_alias_service
 from db.models import resource_thumbnail_state
 from db.session import sync_engine as _sync_engine
@@ -46,11 +47,7 @@ def infer_source_type(source_url: str | None) -> str | None:
         or "display_raster" in lowered
     ):
         return "cog"
-    if (
-        source_url.endswith(("/iiif3/manifest", "/iiif/manifest", "/manifest", "manifest.json"))
-        or "/manifest" in source_url
-        or (".json" in source_url and ("iiif" in lowered or "/object/" in lowered))
-    ):
+    if is_iiif_manifest_url(source_url):
         return "manifest"
     return "remote"
 

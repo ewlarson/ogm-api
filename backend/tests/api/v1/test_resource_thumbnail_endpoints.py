@@ -755,3 +755,88 @@ class TestResourceThumbnailNoCacheRemoteFlow:
             assert image.format == "JPEG"
             assert max(image.size) <= 512
             assert len(resp.content) < len(large_jpeg)
+
+
+class TestResourceThumbnailIIIFInfoFlow:
+    """Regression coverage for capability-aware IIIF Image API sources."""
+
+    @patch("app.api.v1.endpoint_modules.resources.thumbnail.async_session")
+    @patch("app.api.v1.endpoint_modules.resources.thumbnail.fetch_distribution_context")
+    def test_info_document_is_queued_raw_without_image_probe(
+        self, mock_fetch_dist, mock_session, client
+    ):
+        mock_session_instance = AsyncMock()
+        mock_session.return_value.__aenter__.return_value = mock_session_instance
+
+        resource_id = "unr-74479f22-0e6b-4c13-b376-0195a7461525"
+        info_url = f"https://example.com/iiif/{resource_id}/info.json"
+        mock_row = _resource_row(
+            resource_id,
+            f'{{"http://iiif.io/api/image": "{info_url}"}}',
+        )
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = mock_row
+        mock_session_instance.execute = AsyncMock(return_value=mock_result)
+        mock_fetch_dist.return_value = MagicMock(by_uri={}, legacy_reference_payload={})
+
+        with (
+            patch("app.api.v1.endpoint_modules.resources.thumbnail.ImageService") as mock_svc_cls,
+            patch(
+                "app.api.v1.endpoint_modules.resources.thumbnail.THUMBNAIL_REQUEST_PROBE_ENABLED",
+                True,
+            ),
+            patch(
+                "app.api.v1.endpoint_modules.resources.thumbnail._probe_thumbnail_url",
+                new=AsyncMock(return_value=False),
+            ) as mock_probe,
+        ):
+            svc = MagicMock()
+            svc.resolve_thumbnail_source_url.return_value = info_url
+            svc.thumbnail_image_hash_for_source_sync.return_value = None
+            svc._is_cog_url.return_value = False
+            svc._is_pmtiles_url.return_value = False
+            svc._is_manifest_url.return_value = False
+            mock_svc_cls.return_value = svc
+
+            response = client.get(f"/resources/{resource_id}/thumbnail")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/svg+xml"
+        mock_probe.assert_not_awaited()
+        svc._queue_thumbnail_processing.assert_called_once_with(info_url, resource_id)
+
+    @patch("app.api.v1.endpoint_modules.resources.thumbnail.async_session")
+    @patch("app.api.v1.endpoint_modules.resources.thumbnail.fetch_distribution_context")
+    def test_no_cache_info_document_uses_resolved_level_zero_size(
+        self, mock_fetch_dist, mock_session, client
+    ):
+        mock_session_instance = AsyncMock()
+        mock_session.return_value.__aenter__.return_value = mock_session_instance
+
+        resource_id = "unr-74479f22-0e6b-4c13-b376-0195a7461525"
+        info_url = f"https://example.com/iiif/{resource_id}/info.json"
+        image_url = f"https://example.com/iiif/{resource_id}/full/924,/0/default.jpg"
+        mock_row = _resource_row(
+            resource_id,
+            f'{{"http://iiif.io/api/image": "{info_url}"}}',
+        )
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = mock_row
+        mock_session_instance.execute = AsyncMock(return_value=mock_result)
+        mock_fetch_dist.return_value = MagicMock(by_uri={}, legacy_reference_payload={})
+
+        with patch("app.api.v1.endpoint_modules.resources.thumbnail.ImageService") as mock_svc_cls:
+            svc = MagicMock()
+            svc._get_thumbnail_source_url.return_value = info_url
+            svc._is_cog_url.return_value = False
+            svc._is_pmtiles_url.return_value = False
+            svc.get_iiif_image_thumbnail.return_value = image_url
+            svc.download_image = AsyncMock(return_value=_valid_png_bytes())
+            mock_svc_cls.return_value = svc
+
+            response = client.get(f"/resources/{resource_id}/thumbnail/no-cache")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        svc.get_iiif_image_thumbnail.assert_called_once_with(info_url)
+        svc.download_image.assert_awaited_once_with(image_url)
