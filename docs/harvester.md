@@ -71,3 +71,12 @@ For the full application workflow, these backend scripts usually matter more tha
 - `scripts/run_index.py`
 
 Those scripts populate the database tables used by the API and enqueue the nightly ingest pipeline, while `ogm_harvester.py` remains useful for direct inspection and lower-level debugging.
+
+After a successful repository upsert, the application detects new records and
+changes to thumbnail-bearing fields (references, image fields, access rights,
+resource class, service identifier, and geometry). It re-primes only those
+records into OGM-owned visual storage and invalidates generated resource
+representations that may contain an older asset URL. This refresh can be disabled
+with `OGM_THUMBNAIL_REFRESH_ENABLED=false`; a refresh failure is recorded in the
+harvest statistics and does not turn an otherwise successful metadata harvest
+into a failure.

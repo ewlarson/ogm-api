@@ -2,6 +2,10 @@ import hashlib
 import io
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 from typing import Optional, Tuple
 
 import redis
@@ -11,6 +15,12 @@ from dotenv import load_dotenv
 from PIL import Image, ImageOps
 
 from app.services.provider_throttle import provider_request_slot
+from app.services.remote_fetch import (
+    RemotePayloadTooLarge,
+    UnsafeRemoteUrl,
+    fetch_public_http_bytes,
+    validate_public_http_url,
+)
 from app.services.thumbnail_queue_service import release_thumbnail_queue_slot
 from app.services.thumbnail_state_service import (
     ThumbnailState,
@@ -20,6 +30,7 @@ from app.services.thumbnail_state_service import (
 )
 from app.services.visual_asset_cache import (
     cache_visual_asset,
+    durable_visual_asset_enabled,
     store_durable_visual_asset,
     store_durable_visual_asset_link,
 )
@@ -56,6 +67,11 @@ THUMBNAIL_CACHE_VERSION = os.getenv("THUMBNAIL_CACHE_VERSION", "v3")
 THUMBNAIL_MAX_EDGE = int(os.getenv("THUMBNAIL_MAX_EDGE", "512"))
 THUMBNAIL_JPEG_QUALITY = int(os.getenv("THUMBNAIL_JPEG_QUALITY", "78"))
 REMOTE_THUMBNAIL_PREFIX = f"remote-thumb-normalized:{THUMBNAIL_CACHE_VERSION}:"
+PDF_THUMBNAIL_PREFIX = "pdf-thumb:"
+PDF_THUMBNAIL_MAX_BYTES = int(os.getenv("PDF_THUMBNAIL_MAX_BYTES", str(32 * 1024 * 1024)))
+REMOTE_THUMBNAIL_MAX_BYTES = int(
+    os.getenv("REMOTE_THUMBNAIL_MAX_BYTES", str(20 * 1024 * 1024))
+)
 
 # Setup Celery
 broker_url = os.getenv(
@@ -221,6 +237,43 @@ def _normalize_thumbnail_image(
         return None, None
 
 
+def _persist_thumbnail_bytes(
+    image_hash: str,
+    image_bytes: bytes,
+    content_type: str,
+    *,
+    resource_id: str | None,
+    asset_kind: str = "thumbnail",
+) -> bool:
+    """Persist OGM-owned bytes durably, with Redis as an optional hot cache."""
+    durable_stored = store_durable_visual_asset(
+        image_hash,
+        asset_kind=asset_kind,
+        content_type=content_type,
+        body=image_bytes,
+    )
+    if durable_stored and resource_id:
+        store_durable_visual_asset_link(
+            resource_id,
+            asset_hash=image_hash,
+            asset_kind="thumbnail",
+            source_signature=image_hash,
+        )
+
+    redis_stored = False
+    try:
+        redis_stored = bool(
+            cache_visual_asset(redis_client, f"image:{image_hash}", image_bytes)
+        )
+        cache_visual_asset(redis_client, f"image_type:{image_hash}", content_type)
+    except Exception as exc:
+        logger.warning("Redis thumbnail hydration failed for %s: %s", image_hash[:12], exc)
+
+    if durable_visual_asset_enabled():
+        return durable_stored
+    return redis_stored
+
+
 @celery_app.task(bind=True, name="fetch_and_cache_image")
 def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
     """
@@ -237,6 +290,7 @@ def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
         source_type = infer_source_type(url)
         # Determine the actual image URL; handle IIIF manifests by resolving to a thumbnail
         resolved_url = _resolve_image_url(url)
+        resolved_url = validate_public_http_url(resolved_url, resolve_dns=False)
         logger.info(f"Resolved URL: {url} -> {resolved_url}")
 
         # Generate cache key based on the resolved image URL (not the original manifest URL)
@@ -268,38 +322,22 @@ def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
         fetch_timeout = int(os.getenv("THUMBNAIL_FETCH_TIMEOUT", "30"))
         headers = {"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"}
         with provider_request_slot(resolved_url, action="thumbnail fetch") as lease:
-            response = requests.get(resolved_url, timeout=fetch_timeout, headers=headers)
-
-        # Don't retry non-recoverable bot-block/authorization responses.
-        # - 401/403: auth
-        # - 418: common bot-block response (e.g., MSU)
-        if response.status_code in (401, 403, 418):
-            logger.warning(
-                f"Authorization error ({response.status_code}) for {resolved_url}. Not caching."
+            fetched = fetch_public_http_bytes(
+                resolved_url,
+                timeout=fetch_timeout,
+                max_bytes=REMOTE_THUMBNAIL_MAX_BYTES,
+                headers=headers,
             )
-            _record_thumbnail_state(
-                doc_id,
-                state=ThumbnailState.FAILURE,
-                source_type=source_type,
-                source_url=url,
-                source_hash=source_hash,
-                queue_task_id=getattr(getattr(self, "request", None), "id", None),
-                state_detail=f"Non-retryable HTTP status {response.status_code}",
-                last_error=f"HTTP {response.status_code} from {resolved_url}",
-            )
-            return False
-
-        response.raise_for_status()
 
         # Validate that the response is actually an image
-        content_type = response.headers.get("Content-Type", "")
-        is_valid, detected_type = _validate_image_content(response.content, content_type)
+        content_type = fetched.content_type
+        is_valid, detected_type = _validate_image_content(fetched.body, content_type)
 
         if not is_valid:
             logger.error(
                 f"❌ Invalid image content from {resolved_url}: "
                 f"Content-Type={content_type}, detected_type={detected_type}, "
-                f"first_bytes={response.content[:100]!r}"
+                f"first_bytes={fetched.body[:100]!r}"
             )
             # Don't cache invalid content - return False to indicate failure
             _record_thumbnail_state(
@@ -315,7 +353,7 @@ def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
             return False
 
         normalized_content, normalized_type = _normalize_thumbnail_image(
-            response.content, detected_type
+            fetched.body, detected_type
         )
         if not normalized_content or not normalized_type:
             logger.error(f"❌ Thumbnail normalization failed for {resolved_url}")
@@ -331,31 +369,17 @@ def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
             )
             return False
 
-        # Cache image if Redis is available; otherwise, skip caching without retry storms
-        if redis_available:
-            try:
-                # Store image content with detected type (prepend type as metadata)
-                # We'll use a simple format: store content as-is, content type in separate key
-                cache_visual_asset(redis_client, image_key, normalized_content)
-                # Store content type metadata separately (optional, for faster lookups)
-                type_key = f"image_type:{image_key.split(':')[1]}"
-                cache_visual_asset(redis_client, type_key, normalized_type)
-                store_durable_visual_asset(
-                    source_hash,
-                    asset_kind="thumbnail",
-                    content_type=normalized_type,
-                    body=normalized_content,
-                )
-                if doc_id:
-                    store_durable_visual_asset_link(
-                        doc_id,
-                        asset_hash=source_hash,
-                        asset_kind="thumbnail",
-                        source_signature=source_hash,
-                    )
+        # Durable OGM storage is authoritative; Redis is only a hot cache.
+        try:
+            if _persist_thumbnail_bytes(
+                source_hash,
+                normalized_content,
+                normalized_type,
+                resource_id=doc_id,
+            ):
                 logger.info(
                     f"✅ Successfully cached normalized thumbnail: {resolved_url} "
-                    f"(type: {normalized_type}, original={len(response.content)} bytes, "
+                    f"(type: {normalized_type}, original={len(fetched.body)} bytes, "
                     f"normalized={len(normalized_content)} bytes)"
                 )
                 # Note: No need to invalidate search cache - search results always include
@@ -374,34 +398,34 @@ def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
                     state_detail=detail,
                 )
                 return True
-            except Exception as redis_err:
-                logger.warning(
-                    f"Failed to cache image due to Redis error for {resolved_url}: {redis_err}"
-                )
-                _record_thumbnail_state(
-                    doc_id,
-                    state=ThumbnailState.FAILURE,
-                    source_type=source_type,
-                    source_url=url,
-                    source_hash=source_hash,
-                    queue_task_id=getattr(getattr(self, "request", None), "id", None),
-                    state_detail="Redis cache write failed",
-                    last_error=str(redis_err),
-                )
-                return False
-        else:
-            logger.warning(f"Skipping cache store for {resolved_url}: Redis unavailable")
-            _record_thumbnail_state(
-                doc_id,
-                state=ThumbnailState.FAILURE,
-                source_type=source_type,
-                source_url=url,
-                source_hash=source_hash,
-                queue_task_id=getattr(getattr(self, "request", None), "id", None),
-                state_detail="Redis unavailable during cache store",
-                last_error="Redis unavailable during cache store",
-            )
-            return False
+        except Exception as persist_error:
+            logger.warning("Failed to persist thumbnail for %s: %s", resolved_url, persist_error)
+        if not redis_available:
+            logger.info("Redis was unavailable; durable OGM thumbnail persistence was attempted")
+        _record_thumbnail_state(
+            doc_id,
+            state=ThumbnailState.FAILURE,
+            source_type=source_type,
+            source_url=url,
+            source_hash=source_hash,
+            queue_task_id=getattr(getattr(self, "request", None), "id", None),
+            state_detail="Durable thumbnail persistence failed",
+            last_error="Durable thumbnail persistence failed",
+        )
+        return False
+    except (RemotePayloadTooLarge, UnsafeRemoteUrl) as source_error:
+        _record_thumbnail_state(
+            doc_id,
+            state=ThumbnailState.FAILURE,
+            source_type=infer_source_type(url),
+            source_url=url,
+            source_hash=None,
+            queue_task_id=getattr(getattr(self, "request", None), "id", None),
+            state_detail="Rejected unsafe or oversized thumbnail source",
+            last_error=str(source_error),
+        )
+        logger.warning("Rejected thumbnail source %s: %s", url, source_error)
+        return False
     except requests.RequestException as http_err:
         # Don't retry non-recoverable bot-block/authorization responses.
         if isinstance(http_err, requests.HTTPError) and hasattr(http_err.response, "status_code"):
@@ -545,6 +569,151 @@ def _validate_image_content(
         return False, None
 
 
+def _pdf_thumbnail_image_hash(pdf_url: str) -> str:
+    """Compute the cache key hash for a first-page PDF thumbnail."""
+    return hashlib.sha256((PDF_THUMBNAIL_PREFIX + pdf_url).encode()).hexdigest()
+
+
+def _render_pdf_first_page(pdf_bytes: bytes) -> Optional[bytes]:
+    """Render the first PDF page to PNG using the bounded Poppler CLI."""
+    if not pdf_bytes.startswith(b"%PDF-"):
+        return None
+    pdftoppm = shutil.which("pdftoppm")
+    if not pdftoppm:
+        logger.error("pdftoppm is unavailable; cannot render PDF thumbnails")
+        return None
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="ogm-pdf-thumbnail-") as temp_dir:
+            temp_path = Path(temp_dir)
+            pdf_path = temp_path / "source.pdf"
+            output_prefix = temp_path / "page"
+            pdf_path.write_bytes(pdf_bytes)
+            subprocess.run(
+                [
+                    pdftoppm,
+                    "-f",
+                    "1",
+                    "-l",
+                    "1",
+                    "-singlefile",
+                    "-scale-to",
+                    "1024",
+                    "-png",
+                    str(pdf_path),
+                    str(output_prefix),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=60,
+            )
+            output_path = output_prefix.with_suffix(".png")
+            if output_path.exists():
+                return output_path.read_bytes()
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("PDF first-page rendering failed: %s", exc)
+    return None
+
+
+def _generate_pdf_thumbnail_bytes(pdf_url: str) -> Optional[bytes]:
+    """Fetch a public, bounded PDF and render its first page to PNG."""
+    headers = {"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"}
+    fetched = fetch_public_http_bytes(
+        pdf_url,
+        timeout=int(os.getenv("THUMBNAIL_FETCH_TIMEOUT", "30")),
+        max_bytes=PDF_THUMBNAIL_MAX_BYTES,
+        headers=headers,
+    )
+    content_type = fetched.content_type.lower().split(";", 1)[0].strip()
+    if content_type and content_type not in {"application/pdf", "application/octet-stream"}:
+        logger.warning("PDF thumbnail source returned %s: %s", content_type, fetched.final_url)
+        return None
+    return _render_pdf_first_page(fetched.body)
+
+
+@celery_app.task(bind=True, name="generate_pdf_thumbnail")
+def generate_pdf_thumbnail(self, pdf_url: str, doc_id: Optional[str] = None) -> bool:
+    """Generate, normalize, and durably cache a first-page PDF thumbnail."""
+    source_hash = _pdf_thumbnail_image_hash(pdf_url)
+    image_key = f"image:{source_hash}"
+    try:
+        try:
+            if redis_client.exists(image_key):
+                _record_thumbnail_state(
+                    doc_id,
+                    state=ThumbnailState.SUCCESS,
+                    source_type="pdf",
+                    source_url=pdf_url,
+                    source_hash=source_hash,
+                    queue_task_id=getattr(getattr(self, "request", None), "id", None),
+                    state_detail="PDF thumbnail already cached",
+                )
+                return True
+        except Exception as redis_error:
+            logger.warning("Redis unavailable during PDF thumbnail cache check: %s", redis_error)
+
+        with provider_request_slot(pdf_url, action="PDF thumbnail generation") as lease:
+            image_bytes = _generate_pdf_thumbnail_bytes(pdf_url)
+        if not image_bytes:
+            raise ValueError("PDF first-page render returned no image")
+
+        normalized_bytes, normalized_type = _normalize_thumbnail_image(image_bytes, "image/png")
+        if not normalized_bytes or not normalized_type:
+            raise ValueError("PDF first-page thumbnail normalization failed")
+
+        if not _persist_thumbnail_bytes(
+            source_hash,
+            normalized_bytes,
+            normalized_type,
+            resource_id=doc_id,
+            asset_kind="thumbnail:pdf",
+        ):
+            raise RuntimeError("durable PDF thumbnail persistence failed")
+        detail = "Cached PDF first-page thumbnail successfully"
+        if lease.waited_seconds > 0:
+            detail = f"{detail}; provider pacing waited {lease.waited_seconds:.2f}s"
+        _record_thumbnail_state(
+            doc_id,
+            state=ThumbnailState.SUCCESS,
+            source_type="pdf",
+            source_url=pdf_url,
+            source_hash=source_hash,
+            queue_task_id=getattr(getattr(self, "request", None), "id", None),
+            state_detail=detail,
+        )
+        return True
+    except (RemotePayloadTooLarge, UnsafeRemoteUrl) as source_error:
+        _record_thumbnail_state(
+            doc_id,
+            state=ThumbnailState.FAILURE,
+            source_type="pdf",
+            source_url=pdf_url,
+            source_hash=source_hash,
+            queue_task_id=getattr(getattr(self, "request", None), "id", None),
+            state_detail="Rejected unsafe or oversized PDF thumbnail source",
+            last_error=str(source_error),
+        )
+        logger.warning("Rejected PDF thumbnail source %s: %s", pdf_url, source_error)
+        return False
+    except Exception as exc:
+        if _is_terminal_retry(self):
+            _record_thumbnail_state(
+                doc_id,
+                state=ThumbnailState.FAILURE,
+                source_type="pdf",
+                source_url=pdf_url,
+                source_hash=source_hash,
+                queue_task_id=getattr(getattr(self, "request", None), "id", None),
+                state_detail="Exhausted retries for PDF thumbnail generation",
+                last_error=str(exc),
+            )
+        logger.error("PDF thumbnail generation failed for %s: %s", pdf_url, exc)
+        self.retry(exc=exc, countdown=60, max_retries=2)
+        return False
+    finally:
+        release_thumbnail_queue_slot(doc_id, pdf_url)
+
+
 COG_THUMBNAIL_PREFIX = "cog-thumb:"
 
 
@@ -680,24 +849,16 @@ def generate_cog_thumbnail(self, cog_url: str, doc_id: Optional[str] = None) -> 
             )
             return False
 
-        # Cache in Redis
+        # Persist in OGM storage; Redis hydration is best effort.
         try:
-            cache_visual_asset(redis_client, image_key, normalized_bytes)
-            type_key = f"image_type:{image_hash}"
-            cache_visual_asset(redis_client, type_key, normalized_type)
-            store_durable_visual_asset(
+            if not _persist_thumbnail_bytes(
                 image_hash,
+                normalized_bytes,
+                normalized_type,
+                resource_id=doc_id,
                 asset_kind="thumbnail:cog",
-                content_type=normalized_type,
-                body=normalized_bytes,
-            )
-            if doc_id:
-                store_durable_visual_asset_link(
-                    doc_id,
-                    asset_hash=image_hash,
-                    asset_kind="thumbnail",
-                    source_signature=image_hash,
-                )
+            ):
+                raise RuntimeError("durable COG thumbnail persistence failed")
             logger.info(
                 f"Successfully cached COG thumbnail for {cog_url} "
                 f"(type: {normalized_type}, original={len(image_bytes)} bytes, "
@@ -1080,22 +1241,14 @@ def generate_pmtiles_thumbnail(self, pmtiles_url: str, doc_id: Optional[str] = N
             return False
 
         try:
-            cache_visual_asset(redis_client, image_key, normalized_bytes)
-            type_key = f"image_type:{image_hash}"
-            cache_visual_asset(redis_client, type_key, normalized_type)
-            store_durable_visual_asset(
+            if not _persist_thumbnail_bytes(
                 image_hash,
+                normalized_bytes,
+                normalized_type,
+                resource_id=doc_id,
                 asset_kind="thumbnail:pmtiles",
-                content_type=normalized_type,
-                body=normalized_bytes,
-            )
-            if doc_id:
-                store_durable_visual_asset_link(
-                    doc_id,
-                    asset_hash=image_hash,
-                    asset_kind="thumbnail",
-                    source_signature=image_hash,
-                )
+            ):
+                raise RuntimeError("durable PMTiles thumbnail persistence failed")
             logger.info(
                 f"Successfully cached PMTiles thumbnail for {pmtiles_url} "
                 f"(type: {normalized_type}, original={len(image_bytes)} bytes, "

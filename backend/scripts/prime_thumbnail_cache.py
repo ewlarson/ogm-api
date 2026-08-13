@@ -13,6 +13,7 @@ Progress is shown with a tqdm progress bar, including ETA.
 
 Examples:
   python scripts/prime_thumbnail_cache.py
+  python scripts/prime_thumbnail_cache.py --resource-class Maps
   python scripts/prime_thumbnail_cache.py --limit 250 --concurrency 4
   python scripts/prime_thumbnail_cache.py --force b1g_PJxxfKgpqpUT b1g_abc123
 """
@@ -44,6 +45,7 @@ os.environ.setdefault("VISUAL_ASSET_REDIS_LOADING_MAX_WAIT_SECONDS", "900")
 os.environ.setdefault("VISUAL_ASSET_REDIS_LOADING_RETRY_SECONDS", "5")
 
 from app.api.v1.utils import _get_thumbnail_asset_url, sanitize_for_json  # noqa: E402
+from app.services.access_policy import is_restricted_resource  # noqa: E402
 from app.services.distribution_repository import (  # noqa: E402
     async_session_factory,
     fetch_distribution_context,
@@ -55,6 +57,10 @@ from app.services.provider_throttle import (  # noqa: E402
     record_provider_failure,
     record_provider_success,
 )
+from app.services.remote_fetch import (  # noqa: E402
+    fetch_public_http_bytes,
+    validate_public_http_url,
+)
 from app.services.thumbnail_state_service import (  # noqa: E402
     ThumbnailState,
     ThumbnailStatePayload,
@@ -63,11 +69,13 @@ from app.services.thumbnail_state_service import (  # noqa: E402
 )
 from app.services.visual_asset_cache import (  # noqa: E402
     cache_visual_asset,
+    durable_visual_asset_enabled,
     store_durable_visual_asset,
     store_durable_visual_asset_link,
 )
 from app.tasks.worker import (  # noqa: E402
     _generate_cog_thumbnail_bytes,
+    _generate_pdf_thumbnail_bytes,
     _generate_pmtiles_thumbnail_bytes,
     _resolve_image_url,
     _validate_image_content,
@@ -79,6 +87,10 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"
+FALLBACK_ICON_DETAIL = "OGM resource-class fallback icon materialized"
+REMOTE_THUMBNAIL_MAX_BYTES = int(
+    os.getenv("REMOTE_THUMBNAIL_MAX_BYTES", str(20 * 1024 * 1024))
+)
 
 
 def _thumbnail_fetch_timeout() -> int:
@@ -100,27 +112,27 @@ def _store_image_bytes(
     *,
     resource_id: str | None = None,
 ) -> bool:
-    """Store image bytes and MIME metadata in Redis."""
-    try:
-        cache_visual_asset(redis_client, f"image:{image_hash}", image_bytes)
-        cache_visual_asset(redis_client, f"image_type:{image_hash}", content_type)
-        store_durable_visual_asset(
-            image_hash,
+    """Store OGM-owned image bytes durably and optionally hydrate Redis."""
+    durable_stored = store_durable_visual_asset(
+        image_hash,
+        asset_kind="thumbnail",
+        content_type=content_type,
+        body=image_bytes,
+    )
+    if durable_stored and resource_id:
+        store_durable_visual_asset_link(
+            resource_id,
+            asset_hash=image_hash,
             asset_kind="thumbnail",
-            content_type=content_type,
-            body=image_bytes,
+            source_signature=image_hash,
         )
-        if resource_id:
-            store_durable_visual_asset_link(
-                resource_id,
-                asset_hash=image_hash,
-                asset_kind="thumbnail",
-                source_signature=image_hash,
-            )
-        return True
+    redis_stored = False
+    try:
+        redis_stored = bool(cache_visual_asset(redis_client, f"image:{image_hash}", image_bytes))
+        cache_visual_asset(redis_client, f"image_type:{image_hash}", content_type)
     except Exception as exc:
-        logger.warning("Failed to cache thumbnail %s: %s", image_hash[:12], exc)
-        return False
+        logger.warning("Failed to hydrate Redis thumbnail %s: %s", image_hash[:12], exc)
+    return durable_stored if durable_visual_asset_enabled() else redis_stored
 
 
 def _set_pmtiles_skip_marker(image_hash: str) -> bool:
@@ -141,6 +153,22 @@ def _prime_cog_thumbnail(
 ) -> bool:
     with provider_request_slot(source_url, action="thumbnail prime (COG)"):
         image_bytes = _generate_cog_thumbnail_bytes(source_url)
+    if not image_bytes or len(image_bytes) < 100:
+        return False
+    is_valid, _ = _validate_image_content(image_bytes, "image/png")
+    if not is_valid:
+        return False
+    return _store_image_bytes(image_hash, image_bytes, "image/png", resource_id=resource_id)
+
+
+def _prime_pdf_thumbnail(
+    source_url: str,
+    image_hash: str,
+    *,
+    resource_id: str | None = None,
+) -> bool:
+    with provider_request_slot(source_url, action="thumbnail prime (PDF)"):
+        image_bytes = _generate_pdf_thumbnail_bytes(source_url)
     if not image_bytes or len(image_bytes) < 100:
         return False
     is_valid, _ = _validate_image_content(image_bytes, "image/png")
@@ -187,7 +215,7 @@ def _prime_remote_thumbnail(
     *,
     resource_id: str | None = None,
 ) -> tuple[str, str]:
-    resolved_url = _resolve_image_url(source_url)
+    resolved_url = validate_public_http_url(_resolve_image_url(source_url), resolve_dns=False)
     cooldown_remaining = provider_origin_cooldown_remaining(resolved_url)
     if cooldown_remaining > 0:
         return (
@@ -199,8 +227,11 @@ def _prime_remote_thumbnail(
     started = time.monotonic()
     try:
         with provider_request_slot(resolved_url, action="thumbnail prime (remote)"):
-            response = requests.get(
-                resolved_url, timeout=_thumbnail_fetch_timeout(), headers=headers
+            fetched = fetch_public_http_bytes(
+                resolved_url,
+                timeout=_thumbnail_fetch_timeout(),
+                max_bytes=REMOTE_THUMBNAIL_MAX_BYTES,
+                headers=headers,
             )
     except requests.Timeout:
         elapsed = time.monotonic() - started
@@ -232,50 +263,19 @@ def _prime_remote_thumbnail(
             )
         return ("failed", f"{exc} ({resolved_url})")
 
-    if response.status_code in (401, 403, 418):
-        logger.warning(
-            "Authorization/bot-block status %s for %s", response.status_code, resolved_url
-        )
-        record_provider_failure(
-            resolved_url,
-            elapsed_seconds=time.monotonic() - started,
-            failure_type=f"http_{response.status_code}",
-            status_code=response.status_code,
-        )
-        return ("failed", f"HTTP {response.status_code} ({resolved_url})")
-
-    try:
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        elapsed = time.monotonic() - started
-        cooldown_seconds = record_provider_failure(
-            resolved_url,
-            elapsed_seconds=elapsed,
-            failure_type="request_error",
-            status_code=response.status_code,
-        )
-        if cooldown_seconds > 0:
-            return (
-                "deprioritized",
-                f"provider HTTP failure; cooling down for {cooldown_seconds:.0f}s ({resolved_url})",
-            )
-        return ("failed", f"{exc} ({resolved_url})")
-
-    is_valid, detected_type = _validate_image_content(
-        response.content, response.headers.get("Content-Type")
-    )
+    is_valid, detected_type = _validate_image_content(fetched.body, fetched.content_type)
     if not is_valid:
         record_provider_failure(
             resolved_url,
             elapsed_seconds=time.monotonic() - started,
             failure_type="invalid_content",
-            status_code=response.status_code,
+            status_code=None,
         )
         return ("failed", f"invalid image content ({resolved_url})")
 
     if _store_image_bytes(
         image_hash,
-        response.content,
+        fetched.body,
         detected_type or "image/jpeg",
         resource_id=resource_id,
     ):
@@ -285,7 +285,25 @@ def _prime_remote_thumbnail(
     return ("failed", f"failed to cache thumbnail ({resolved_url})")
 
 
-async def _count_resources(resource_ids: list[str]) -> int:
+def _apply_resource_filters(
+    stmt: Any,
+    *,
+    resource_class: str | None,
+    provider: str | None,
+) -> Any:
+    if resource_class:
+        stmt = stmt.where(resources.c.gbl_resourceClass_sm.any(resource_class))
+    if provider:
+        stmt = stmt.where(resources.c.schema_provider_s == provider)
+    return stmt
+
+
+async def _count_resources(
+    resource_ids: list[str],
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
+) -> int:
     async with async_session_factory() as session:
         if resource_ids:
             stmt = (
@@ -293,23 +311,52 @@ async def _count_resources(resource_ids: list[str]) -> int:
             )
         else:
             stmt = select(func.count()).select_from(resources)
+        stmt = _apply_resource_filters(
+            stmt,
+            resource_class=resource_class,
+            provider=provider,
+        )
         result = await session.execute(stmt)
         return int(result.scalar_one() or 0)
 
 
-async def _fetch_resources_by_ids(resource_ids: list[str]) -> list[dict[str, Any]]:
+async def _fetch_resources_by_ids(
+    resource_ids: list[str],
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
+) -> list[dict[str, Any]]:
     if not resource_ids:
         return []
 
     async with async_session_factory() as session:
-        stmt = select(resources).where(resources.c.id.in_(resource_ids)).order_by(resources.c.id)
+        stmt = select(resources).where(resources.c.id.in_(resource_ids))
+        stmt = _apply_resource_filters(
+            stmt,
+            resource_class=resource_class,
+            provider=provider,
+        ).order_by(resources.c.id)
         result = await session.execute(stmt)
         return [sanitize_for_json(dict(row._mapping)) for row in result.fetchall()]
 
 
-async def _fetch_resource_batch(last_id: str | None, batch_size: int) -> list[dict[str, Any]]:
+async def _fetch_resource_batch(
+    last_id: str | None,
+    batch_size: int,
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
+) -> list[dict[str, Any]]:
     async with async_session_factory() as session:
-        stmt = select(resources).order_by(resources.c.id).limit(batch_size)
+        stmt = (
+            _apply_resource_filters(
+                select(resources),
+                resource_class=resource_class,
+                provider=provider,
+            )
+            .order_by(resources.c.id)
+            .limit(batch_size)
+        )
         if last_id is not None:
             stmt = stmt.where(resources.c.id > last_id)
         result = await session.execute(stmt)
@@ -329,6 +376,44 @@ async def _fetch_thumbnail_states(resource_ids: list[str]) -> dict[str, dict[str
         return {
             str(row._mapping["resource_id"]): sanitize_for_json(dict(row._mapping)) for row in rows
         }
+
+
+async def _prime_resource_class_icon(
+    resource_dict: dict[str, Any],
+    *,
+    force: bool,
+) -> str | None:
+    """Materialize an OGM-owned immutable icon for a record with no preview source."""
+    from app.api.v1.endpoint_modules.resources.thumbnail import (
+        _resource_class_icon_signature,
+        _svg_icon_bytes_for_resource,
+    )
+    from app.services.static_map_service import StaticMapService
+
+    resource_id = str(resource_dict.get("id") or "")
+    if not resource_id:
+        return None
+    service = StaticMapService()
+    signature = _resource_class_icon_signature(resource_dict, variant="icon-basemap")
+    if not force:
+        cached_hash = await asyncio.to_thread(
+            service.materialize_cached_variant_sync,
+            resource_id,
+            variant="resource-class-icon",
+            source_signature=signature,
+            hydrate_asset=False,
+        )
+        if cached_hash:
+            return cached_hash
+
+    svg_bytes = await _svg_icon_bytes_for_resource(resource_dict, variant="icon-basemap")
+    return await service.materialize_asset(
+        resource_id,
+        variant="resource-class-icon",
+        map_bytes=svg_bytes,
+        source_signature=signature,
+        hydrate_asset=False,
+    )
 
 
 def _should_resume_skip(
@@ -372,7 +457,7 @@ async def _prime_thumbnail_for_resource(
     if should_skip:
         return ("skipped-resume", resource_id, skip_reason)
 
-    if resource_dict.get("dct_accessrights_s") == "Restricted":
+    if is_restricted_resource(resource_dict):
         return ("skipped-restricted", resource_id, "restricted")
 
     distribution_context = await fetch_distribution_context(resource_id)
@@ -382,15 +467,22 @@ async def _prime_thumbnail_for_resource(
     )
 
     if not source_url:
+        icon_hash = await _prime_resource_class_icon(resource_dict, force=force)
         await safe_record_thumbnail_state(
             ThumbnailStatePayload(
                 resource_id=resource_id,
                 state=ThumbnailState.PLACEHELD,
                 source_type=None,
                 source_url=None,
-                state_detail="No thumbnail source available during prime run",
+                state_detail=(
+                    "No preview source; OGM resource-class icon materialized"
+                    if icon_hash
+                    else "No thumbnail source available during prime run"
+                ),
             )
         )
+        if icon_hash:
+            return ("generated-icon", resource_id, "resource-class icon")
         return ("skipped-no-source", resource_id, "no thumbnail source")
 
     try:
@@ -514,6 +606,38 @@ async def _prime_thumbnail_for_resource(
             )
             return ("failed", resource_id, "pmtiles")
 
+        if infer_source_type(source_url) == "pdf":
+            ok = await asyncio.to_thread(
+                _prime_pdf_thumbnail,
+                source_url,
+                image_hash,
+                resource_id=resource_id,
+            )
+            await safe_record_thumbnail_state(
+                ThumbnailStatePayload(
+                    resource_id=resource_id,
+                    state=ThumbnailState.SUCCESS if ok else ThumbnailState.FAILURE,
+                    source_type="pdf",
+                    source_url=source_url,
+                    source_hash=image_hash,
+                    state_detail=(
+                        "PDF first-page thumbnail primed"
+                        if ok
+                        else "PDF first-page thumbnail prime failed"
+                    ),
+                    last_error=None if ok else "PDF first-page thumbnail prime failed",
+                )
+            )
+            return (
+                ("generated", resource_id, "pdf")
+                if ok
+                else (
+                    "failed",
+                    resource_id,
+                    "pdf",
+                )
+            )
+
         remote_status, remote_detail = await asyncio.to_thread(
             _prime_remote_thumbnail,
             image_hash,
@@ -552,6 +676,32 @@ async def _prime_thumbnail_for_resource(
         return ("failed", resource_id, str(exc))
 
 
+async def _prime_thumbnail_with_fallback_for_resource(
+    resource_dict: dict[str, Any],
+    *,
+    force: bool,
+    retry_failures: bool = False,
+    retry_placeheld: bool = False,
+    existing_state: dict[str, Any] | None = None,
+) -> tuple[str, str, str]:
+    """Prime a preview and ensure a durable local icon for every eligible miss."""
+    result = await _prime_thumbnail_for_resource(
+        resource_dict,
+        force=force,
+        retry_failures=retry_failures,
+        retry_placeheld=retry_placeheld,
+        existing_state=existing_state,
+    )
+    status, resource_id, detail = result
+    if status in {"generated", "cached", "generated-icon", "skipped-restricted"}:
+        return result
+
+    icon_hash = await _prime_resource_class_icon(resource_dict, force=force)
+    if not icon_hash:
+        return result
+    return (status, resource_id, f"{detail}; {FALLBACK_ICON_DETAIL}")
+
+
 async def _process_batch(
     batch: list[dict[str, Any]],
     *,
@@ -568,7 +718,7 @@ async def _process_batch(
 
     async def _run(resource_dict: dict[str, Any]) -> tuple[str, str, str]:
         async with semaphore:
-            return await _prime_thumbnail_for_resource(
+            return await _prime_thumbnail_with_fallback_for_resource(
                 resource_dict,
                 force=force,
                 retry_failures=retry_failures,
@@ -581,11 +731,14 @@ async def _process_batch(
     for future in asyncio.as_completed(tasks):
         status, resource_id, detail = await future
         counters[status] += 1
+        if FALLBACK_ICON_DETAIL in detail:
+            counters["fallback-icon"] += 1
         if status == "failed":
             failures.append(f"{resource_id}: {detail}")
         progress.update(1)
         progress.set_postfix(
             generated=counters["generated"] + counters["generated-skip"],
+            icons=counters["generated-icon"] + counters["fallback-icon"],
             cached=counters["cached"] + counters["cached-skip"],
             skipped=(
                 counters["skipped-no-source"]
@@ -599,7 +752,13 @@ async def _process_batch(
 
 async def _run(args: argparse.Namespace) -> int:
     resource_ids = args.resource_ids
-    total = len(resource_ids) if resource_ids else await _count_resources(resource_ids)
+    resource_class = getattr(args, "resource_class", None)
+    provider = getattr(args, "provider", None)
+    total = await _count_resources(
+        resource_ids,
+        resource_class=resource_class,
+        provider=provider,
+    )
     if args.limit is not None:
         total = min(total, args.limit)
 
@@ -619,7 +778,11 @@ async def _run(args: argparse.Namespace) -> int:
 
     try:
         if resource_ids:
-            remaining = await _fetch_resources_by_ids(resource_ids)
+            remaining = await _fetch_resources_by_ids(
+                resource_ids,
+                resource_class=resource_class,
+                provider=provider,
+            )
             if args.limit is not None:
                 remaining = remaining[: args.limit]
             for start in range(0, len(remaining), args.batch_size):
@@ -639,7 +802,12 @@ async def _run(args: argparse.Namespace) -> int:
             processed = 0
             while processed < total:
                 batch_size = min(args.batch_size, total - processed)
-                batch = await _fetch_resource_batch(last_id, batch_size)
+                batch = await _fetch_resource_batch(
+                    last_id,
+                    batch_size,
+                    resource_class=resource_class,
+                    provider=provider,
+                )
                 if not batch:
                     break
                 await _process_batch(
@@ -659,11 +827,14 @@ async def _run(args: argparse.Namespace) -> int:
 
     logger.info(
         "Thumbnail priming complete: generated=%s generated_skip=%s cached=%s cached_skip=%s "
-        "skipped_no_source=%s skipped_restricted=%s skipped_resume=%s deprioritized=%s failed=%s",
+        "generated_icon=%s fallback_icon=%s skipped_no_source=%s skipped_restricted=%s "
+        "skipped_resume=%s deprioritized=%s failed=%s",
         counters["generated"],
         counters["generated-skip"],
         counters["cached"],
         counters["cached-skip"],
+        counters["generated-icon"],
+        counters["fallback-icon"],
         counters["skipped-no-source"],
         counters["skipped-restricted"],
         counters["skipped-resume"],
@@ -684,6 +855,16 @@ async def _run(args: argparse.Namespace) -> int:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prime thumbnail cache entries.")
     parser.add_argument("resource_ids", nargs="*", help="Optional explicit resource IDs to prime")
+    parser.add_argument(
+        "--resource-class",
+        default=None,
+        help="Limit priming to an exact gbl_resourceClass_sm value (for example, Maps).",
+    )
+    parser.add_argument(
+        "--provider",
+        default=None,
+        help="Optionally limit priming to an exact schema_provider_s value.",
+    )
     parser.add_argument("--limit", type=int, default=None, help="Limit number of resources")
     parser.add_argument(
         "--batch-size", type=int, default=100, help="Database batch size for resource fetches"

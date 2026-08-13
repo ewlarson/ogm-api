@@ -46,7 +46,25 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-async def _count_resources(resource_ids: list[str]) -> int:
+def _apply_resource_filters(
+    stmt: Any,
+    *,
+    resource_class: str | None,
+    provider: str | None,
+) -> Any:
+    if resource_class:
+        stmt = stmt.where(resources.c.gbl_resourceClass_sm.any(resource_class))
+    if provider:
+        stmt = stmt.where(resources.c.schema_provider_s == provider)
+    return stmt
+
+
+async def _count_resources(
+    resource_ids: list[str],
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
+) -> int:
     async with async_session_factory() as session:
         if resource_ids:
             stmt = (
@@ -54,31 +72,52 @@ async def _count_resources(resource_ids: list[str]) -> int:
             )
         else:
             stmt = select(func.count()).select_from(resources)
+        stmt = _apply_resource_filters(
+            stmt,
+            resource_class=resource_class,
+            provider=provider,
+        )
         result = await session.execute(stmt)
         return int(result.scalar_one() or 0)
 
 
-async def _fetch_resources_by_ids(resource_ids: list[str]) -> list[dict[str, Any]]:
+async def _fetch_resources_by_ids(
+    resource_ids: list[str],
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
+) -> list[dict[str, Any]]:
     if not resource_ids:
         return []
 
     async with async_session_factory() as session:
-        stmt = (
-            select(resources.c.id, resources.c.locn_geometry, resources.c.dcat_bbox)
-            .where(resources.c.id.in_(resource_ids))
-            .order_by(resources.c.id)
-        )
+        stmt = select(
+            resources.c.id,
+            resources.c.locn_geometry,
+            resources.c.dcat_bbox,
+        ).where(resources.c.id.in_(resource_ids))
+        stmt = _apply_resource_filters(
+            stmt,
+            resource_class=resource_class,
+            provider=provider,
+        ).order_by(resources.c.id)
         result = await session.execute(stmt)
         return [dict(row._mapping) for row in result.fetchall()]
 
 
-async def _fetch_resource_batch(last_id: str | None, batch_size: int) -> list[dict[str, Any]]:
+async def _fetch_resource_batch(
+    last_id: str | None,
+    batch_size: int,
+    *,
+    resource_class: str | None = None,
+    provider: str | None = None,
+) -> list[dict[str, Any]]:
     async with async_session_factory() as session:
-        stmt = (
-            select(resources.c.id, resources.c.locn_geometry, resources.c.dcat_bbox)
-            .order_by(resources.c.id)
-            .limit(batch_size)
-        )
+        stmt = _apply_resource_filters(
+            select(resources.c.id, resources.c.locn_geometry, resources.c.dcat_bbox),
+            resource_class=resource_class,
+            provider=provider,
+        ).order_by(resources.c.id).limit(batch_size)
         if last_id is not None:
             stmt = stmt.where(resources.c.id > last_id)
         result = await session.execute(stmt)
@@ -225,7 +264,13 @@ async def _process_batch(
 
 async def _run(args: argparse.Namespace) -> int:
     resource_ids = args.resource_ids
-    total = len(resource_ids) if resource_ids else await _count_resources(resource_ids)
+    resource_class = getattr(args, "resource_class", None)
+    provider = getattr(args, "provider", None)
+    total = await _count_resources(
+        resource_ids,
+        resource_class=resource_class,
+        provider=provider,
+    )
     if args.limit is not None:
         total = min(total, args.limit)
 
@@ -266,7 +311,11 @@ async def _run(args: argparse.Namespace) -> int:
 
     try:
         if resource_ids:
-            remaining = await _fetch_resources_by_ids(resource_ids)
+            remaining = await _fetch_resources_by_ids(
+                resource_ids,
+                resource_class=resource_class,
+                provider=provider,
+            )
             if args.limit is not None:
                 remaining = remaining[: args.limit]
             for start in range(0, len(remaining), args.batch_size):
@@ -285,7 +334,12 @@ async def _run(args: argparse.Namespace) -> int:
             processed = 0
             while processed < total:
                 batch_size = min(args.batch_size, total - processed)
-                batch = await _fetch_resource_batch(last_id, batch_size)
+                batch = await _fetch_resource_batch(
+                    last_id,
+                    batch_size,
+                    resource_class=resource_class,
+                    provider=provider,
+                )
                 if not batch:
                     break
                 await _process_batch(
@@ -323,6 +377,8 @@ async def _run(args: argparse.Namespace) -> int:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prime static-map and basemap cache entries.")
     parser.add_argument("resource_ids", nargs="*", help="Optional explicit resource IDs to prime")
+    parser.add_argument("--resource-class", help="Exact gbl_resourceClass_sm value to include")
+    parser.add_argument("--provider", help="Optional exact schema_provider_s value to include")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of resources")
     parser.add_argument(
         "--batch-size", type=int, default=100, help="Database batch size for resource fetches"

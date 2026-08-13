@@ -5,6 +5,18 @@ import pytest
 import scripts.prime_thumbnail_cache as prime_thumbnail_cache
 
 
+def test_resource_filters_compile_exact_resource_class_and_provider():
+    statement = prime_thumbnail_cache._apply_resource_filters(
+        prime_thumbnail_cache.select(prime_thumbnail_cache.resources),
+        resource_class="Maps",
+        provider="OpenGeoMetadata",
+    )
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "'Maps' = ANY" in compiled
+    assert "schema_provider_s = 'OpenGeoMetadata'" in compiled
+
+
 @pytest.mark.asyncio
 async def test_prime_thumbnail_no_source_records_placeheld():
     resource = {"id": "resource-no-source", "dct_accessrights_s": "Public"}
@@ -17,6 +29,11 @@ async def test_prime_thumbnail_no_source_records_placeheld():
         patch.object(
             prime_thumbnail_cache, "_get_thumbnail_asset_url", AsyncMock(return_value=None)
         ),
+        patch.object(
+            prime_thumbnail_cache,
+            "_prime_resource_class_icon",
+            AsyncMock(return_value="icon-hash"),
+        ),
         patch.object(prime_thumbnail_cache, "ImageService") as mock_service_cls,
     ):
         service = MagicMock()
@@ -26,10 +43,55 @@ async def test_prime_thumbnail_no_source_records_placeheld():
 
         result = await prime_thumbnail_cache._prime_thumbnail_for_resource(resource, force=False)
 
-        assert result == ("skipped-no-source", "resource-no-source", "no thumbnail source")
+        assert result == ("generated-icon", "resource-no-source", "resource-class icon")
         payload = mock_state.await_args.args[0]
         assert payload.state == "placeheld"
         assert payload.resource_id == "resource-no-source"
+        assert "OGM resource-class icon" in payload.state_detail
+
+
+@pytest.mark.asyncio
+async def test_prime_thumbnail_skips_canonical_restricted_resource_before_source_lookup():
+    resource = {"id": "resource-restricted", "dct_accessRights_s": "Restricted"}
+
+    with (
+        patch.object(prime_thumbnail_cache, "fetch_distribution_context", AsyncMock()) as fetch,
+        patch.object(prime_thumbnail_cache, "ImageService") as mock_service_cls,
+    ):
+        result = await prime_thumbnail_cache._prime_thumbnail_for_resource(resource, force=False)
+
+    assert result == ("skipped-restricted", "resource-restricted", "restricted")
+    fetch.assert_not_awaited()
+    mock_service_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_prime_thumbnail_failure_materializes_local_fallback_icon():
+    resource = {"id": "resource-failed", "gbl_resourceClass_sm": ["Maps"]}
+
+    with (
+        patch.object(
+            prime_thumbnail_cache,
+            "_prime_thumbnail_for_resource",
+            AsyncMock(return_value=("failed", "resource-failed", "upstream failed")),
+        ),
+        patch.object(
+            prime_thumbnail_cache,
+            "_prime_resource_class_icon",
+            AsyncMock(return_value="icon-hash"),
+        ) as prime_icon,
+    ):
+        result = await prime_thumbnail_cache._prime_thumbnail_with_fallback_for_resource(
+            resource,
+            force=False,
+        )
+
+    assert result == (
+        "failed",
+        "resource-failed",
+        f"upstream failed; {prime_thumbnail_cache.FALLBACK_ICON_DETAIL}",
+    )
+    prime_icon.assert_awaited_once_with(resource, force=False)
 
 
 @pytest.mark.asyncio

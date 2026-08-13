@@ -10,6 +10,7 @@ from app.services.ogm_harvest.dumps import OGMHarvestDumpWriter
 from app.services.ogm_harvest.importer import OGMResourceImporter
 from app.services.ogm_harvest.repo_sync import OGMRepoSync
 from app.services.ogm_harvest.repository import OGMHarvestRepository
+from app.services.thumbnail_refresh_service import refresh_thumbnail_cache_for_changed_resources
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,28 @@ async def harvest_repo(
             ogm_run_id=run_id,
             progress_meta={"head_sha": head_sha, "repo_action": sync_result.action},
         )
+        changed_thumbnail_ids = sorted(importer.changed_thumbnail_resource_ids)
+        stats["thumbnail_sources_changed"] = len(changed_thumbnail_ids)
+        if changed_thumbnail_ids:
+            await repo.update_harvest_run(
+                ogm_id=run_id,
+                ogm_stats_json={
+                    **(stats or {}),
+                    "stage": "thumbnail_refresh",
+                    "updated_at": datetime.utcnow().isoformat() + "Z",
+                },
+            )
+            try:
+                stats[
+                    "thumbnail_cache_refresh"
+                ] = await refresh_thumbnail_cache_for_changed_resources(changed_thumbnail_ids)
+            except Exception as exc:
+                logger.warning(
+                    "OGM thumbnail cache refresh failed for repo=%s; continuing. err=%s",
+                    repo_name,
+                    exc,
+                )
+                stats["thumbnail_cache_refresh"] = {"enabled": True, "error": str(exc)}
         await repo.update_harvest_run(
             ogm_id=run_id,
             ogm_stats_json={

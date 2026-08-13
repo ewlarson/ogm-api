@@ -7,6 +7,18 @@ import pytest
 import scripts.prime_resource_representation_cache as prime_resource_cache
 
 
+def test_resource_filters_compile_exact_resource_class_and_provider():
+    statement = prime_resource_cache._apply_resource_filters(
+        prime_resource_cache.select(prime_resource_cache.resources),
+        resource_class="Maps",
+        provider="OpenGeoMetadata",
+    )
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "'Maps' = ANY" in compiled
+    assert "schema_provider_s = 'OpenGeoMetadata'" in compiled
+
+
 class DummyProgress:
     def __init__(self, *args, **kwargs):
         self.total = kwargs.get("total")
@@ -267,7 +279,12 @@ async def test_prime_resource_cache_counts_missing_explicit_resource_ids():
     assert counters == Counter({"primed": 1, "missing": 1})
     mock_connect.assert_awaited_once()
     mock_disconnect.assert_awaited_once_with(True)
-    mock_fetch.assert_awaited_once_with(["resource-1", "resource-missing"], None)
+    mock_fetch.assert_awaited_once_with(
+        ["resource-1", "resource-missing"],
+        None,
+        resource_class=None,
+        provider=None,
+    )
     mock_prime_batch.assert_awaited_once()
 
 
