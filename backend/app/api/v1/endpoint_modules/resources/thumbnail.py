@@ -13,6 +13,7 @@ from sqlalchemy.sql import select
 from app.api.v1.utils import _get_thumbnail_asset_url, sanitize_for_json
 from app.services.cache_service import alias_redirect_cache_control_header
 from app.services.distribution_repository import fetch_distribution_context
+from app.services.iiif_url import is_iiif_info_url
 from app.services.image_service import ImageService
 from app.services.static_map_service import StaticMapService
 from app.services.thumbnail_alias_service import is_thumbnail_hash, thumbnail_alias_service
@@ -532,6 +533,7 @@ async def _get_resource_thumbnail_response(
     # URLs are processed server-side, so skip probe.
     if (
         not image_service._is_manifest_url(source_url)
+        and not is_iiif_info_url(source_url)
         and not image_service._is_cog_url(source_url)
         and not image_service._is_pmtiles_url(source_url)
         and THUMBNAIL_REQUEST_PROBE_ENABLED
@@ -606,7 +608,7 @@ async def _get_resource_thumbnail_response(
                         state_detail="PMTiles thumbnail generation already queued",
                     )
                 )
-        elif image_service._is_manifest_url(source_url):
+        elif image_service._is_manifest_url(source_url) or is_iiif_info_url(source_url):
             image_service._queue_thumbnail_processing(source_url, id)
         else:
             standardized_url = image_service._standardize_iiif_url(source_url)
@@ -743,10 +745,19 @@ async def get_resource_thumbnail_no_cache(
                 )
             return await _svg_icon_for_resource(resource_dict, variant=variant)
 
-        # Resolve manifests to actual image URLs when needed
-        if image_service._is_manifest_url(source_url):
+        # Resolve IIIF metadata to an actual image URL when needed.
+        if is_iiif_info_url(source_url):
+            resolved = await asyncio.to_thread(image_service.get_iiif_image_thumbnail, source_url)
+            if not resolved:
+                return _svg_placeholder(
+                    title="Thumbnail unavailable", subtitle="Error resolving IIIF"
+                )
+            fetch_url = resolved
+        elif image_service._is_manifest_url(source_url):
             # This may fetch the manifest once to resolve thumbnail URL
-            resolved = image_service.get_iiif_manifest_thumbnail(source_url)
+            resolved = await asyncio.to_thread(
+                image_service.get_iiif_manifest_thumbnail, source_url
+            )
             if not resolved:
                 return _svg_placeholder(
                     title="Thumbnail unavailable", subtitle="Error resolving IIIF"
