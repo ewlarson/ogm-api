@@ -6,7 +6,7 @@ import time
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.services.distribution_sync import (
@@ -24,6 +24,16 @@ from db.database import database
 from db.models import resources
 
 logger = logging.getLogger(__name__)
+
+THUMBNAIL_SOURCE_FIELDS = (
+    "dct_references_s",
+    "b1g_image_ss",
+    "dct_accessRights_s",
+    "gbl_resourceClass_sm",
+    "gbl_wxsIdentifier_s",
+    "dcat_bbox",
+    "locn_geometry",
+)
 
 
 def derive_repo_alias(repo_name: str) -> Optional[str]:
@@ -101,6 +111,38 @@ class OGMResourceImporter:
     def __init__(self, repo: Optional[OGMHarvestRepository] = None):
         self.repo = repo or OGMHarvestRepository()
         self._resource_columns_cache: Optional[Set[str]] = None
+        self.changed_thumbnail_resource_ids: Set[str] = set()
+
+    @staticmethod
+    def _thumbnail_source_signature(row: Dict[str, Any]) -> Tuple[Any, ...]:
+        def freeze(value: Any) -> Any:
+            if isinstance(value, list):
+                return tuple(freeze(item) for item in value)
+            if isinstance(value, dict):
+                return tuple(sorted((str(key), freeze(item)) for key, item in value.items()))
+            return value
+
+        return tuple(freeze(row.get(field)) for field in THUMBNAIL_SOURCE_FIELDS)
+
+    async def _changed_thumbnail_ids(self, rows: List[Dict[str, Any]]) -> Set[str]:
+        ids = [str(row.get("id")) for row in rows if row.get("id")]
+        if not ids:
+            return set()
+        columns = [resources.c.id]
+        columns.extend(resources.c[field] for field in THUMBNAIL_SOURCE_FIELDS)
+        existing_rows = await database.fetch_all(select(*columns).where(resources.c.id.in_(ids)))
+        existing_by_id = {
+            str(row["id"]): dict(getattr(row, "_mapping", row)) for row in existing_rows
+        }
+        changed: Set[str] = set()
+        for row in rows:
+            resource_id = str(row.get("id") or "")
+            existing = existing_by_id.get(resource_id)
+            if not existing or self._thumbnail_source_signature(
+                row
+            ) != self._thumbnail_source_signature(existing):
+                changed.add(resource_id)
+        return changed
 
     async def _resource_columns_in_db(self) -> Set[str]:
         """Return current resources table columns from the connected DB."""
@@ -377,6 +419,7 @@ class OGMResourceImporter:
         resources in batches, while also updating ogm_resource_state in batches.
         """
         stats = {"processed": 0, "imported": 0, "skipped": 0, "errors": 0}
+        self.changed_thumbnail_resource_ids.clear()
         error_samples: List[Dict[str, Any]] = []
         error_signature_counts: Dict[str, int] = {}
 
@@ -451,6 +494,7 @@ class OGMResourceImporter:
             if not rows:
                 return 0
             try:
+                changed_thumbnail_ids = await self._changed_thumbnail_ids(rows)
                 stmt = pg_insert(resources).values(rows)
                 update_map = {
                     c.name: stmt.excluded[c.name] for c in upsert_columns if c.name != "id"
@@ -473,6 +517,7 @@ class OGMResourceImporter:
                             str(rel_err),
                         )
                     await self.repo.upsert_resources_seen_batch(repo_name, seen)
+                self.changed_thumbnail_resource_ids.update(changed_thumbnail_ids)
                 return len(rows)
             except Exception as e:
                 if len(rows) == 1:

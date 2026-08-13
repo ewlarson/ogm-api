@@ -616,6 +616,58 @@ class TestImageServiceThumbnailSourceURL:
         except Exception as e:
             assert _is_redis_connection_error(e)
 
+    def test_get_thumbnail_source_url_uses_labeled_download_image_as_fallback(self):
+        metadata = {"id": "test-doc"}
+        references = {
+            "http://schema.org/downloadUrl": [
+                {"url": "https://example.com/data.zip", "label": "Shapefile"},
+                {"url": "https://example.com/preview", "label": "JPEG"},
+            ]
+        }
+
+        service = ImageService(metadata)
+
+        assert service._get_thumbnail_source_url(references) == "https://example.com/preview"
+
+    def test_get_thumbnail_source_url_uses_pdf_download_after_image_options(self):
+        metadata = {"id": "test-doc"}
+        references = {
+            "http://schema.org/downloadUrl": [
+                {"url": "https://example.com/data.zip", "label": "Shapefile"},
+                {"url": "https://example.com/map.pdf", "label": "PDF"},
+            ]
+        }
+
+        service = ImageService(metadata)
+        source_url = service._get_thumbnail_source_url(references)
+
+        assert source_url == "https://example.com/map.pdf"
+        assert service._is_pdf_url(source_url)
+        assert (
+            service.thumbnail_image_hash_for_source_sync(source_url)
+            == hashlib.sha256(f"pdf-thumb:{source_url}".encode()).hexdigest()
+        )
+
+    def test_public_thumbnail_url_never_exposes_the_external_source(self):
+        source_url = "https://images.example.edu/map.jpg"
+        service = ImageService(
+            {
+                "id": "test-doc",
+                "dct_references_s": json.dumps(
+                    {"http://schema.org/thumbnailUrl": source_url}
+                ),
+            }
+        )
+
+        with (
+            patch.object(service, "_api_v1_base_url", return_value="https://ogm.example/api/v1"),
+            patch.object(service, "current_thumbnail_hash_for_source_sync", return_value=None),
+        ):
+            thumbnail_url = service.get_thumbnail_url()
+
+        assert thumbnail_url == "https://ogm.example/api/v1/resources/test-doc/thumbnail"
+        assert source_url not in thumbnail_url
+
 
 class TestImageServiceIsCogUrl:
     """Test _is_cog_url helper."""

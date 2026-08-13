@@ -31,7 +31,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-STAGES = ("resources", "thumbnails", "static-maps")
+# Thumbnail priming runs before representations so gallery payloads embed the
+# final immutable OGM thumbnail/icon URLs instead of transient resolver URLs.
+STAGES = ("thumbnails", "static-maps", "resources")
 
 
 def configure_logging(*, verbose: bool = False) -> None:
@@ -67,20 +69,9 @@ async def _run(args: argparse.Namespace) -> int:
     from scripts.prime_thumbnail_cache import _run as prime_thumbnails  # noqa: PLC0415
 
     stages = _normalize_stages(args.stage)
+    resource_class = getattr(args, "resource_class", None)
+    provider = getattr(args, "provider", None)
     exit_code = 0
-
-    if "resources" in stages:
-        logger.info("Priming generated resource representations...")
-        counters = await prime_resource_representation_cache(
-            resource_ids=args.resource_ids,
-            limit=args.limit,
-            batch_size=max(1, args.resource_batch_size),
-            concurrency=max(1, args.resource_concurrency),
-            force=args.force,
-        )
-        _print_resource_summary(counters)
-        if counters["failed"] and args.strict_failures:
-            exit_code = max(exit_code, 1)
 
     if "thumbnails" in stages:
         logger.info("Priming thumbnail generated visual assets...")
@@ -96,6 +87,8 @@ async def _run(args: argparse.Namespace) -> int:
                 strict_failures=args.strict_failures,
                 hydrate_assets=args.hydrate_assets,
                 allow_full_hydration=args.allow_full_hydration,
+                resource_class=resource_class,
+                provider=provider,
             )
         )
         exit_code = max(exit_code, thumbnail_code)
@@ -112,9 +105,26 @@ async def _run(args: argparse.Namespace) -> int:
                 hydrate_assets=args.hydrate_assets,
                 allow_full_hydration=args.allow_full_hydration,
                 strict_failures=args.strict_failures,
+                resource_class=resource_class,
+                provider=provider,
             )
         )
         exit_code = max(exit_code, static_map_code)
+
+    if "resources" in stages:
+        logger.info("Priming generated resource representations...")
+        counters = await prime_resource_representation_cache(
+            resource_ids=args.resource_ids,
+            limit=args.limit,
+            batch_size=max(1, args.resource_batch_size),
+            concurrency=max(1, args.resource_concurrency),
+            force=args.force,
+            resource_class=resource_class,
+            provider=provider,
+        )
+        _print_resource_summary(counters)
+        if counters["failed"] and args.strict_failures:
+            exit_code = max(exit_code, 1)
 
     print(f"Generated cache priming finished for stages: {', '.join(stages)}")
     return exit_code
@@ -125,6 +135,14 @@ def _parse_args() -> argparse.Namespace:
         description="Prime generated resource, thumbnail, and static-map caches."
     )
     parser.add_argument("resource_ids", nargs="*", help="Optional explicit resource IDs to prime")
+    parser.add_argument(
+        "--resource-class",
+        help="Limit thumbnail and representation stages to an exact resource class.",
+    )
+    parser.add_argument(
+        "--provider",
+        help="Optional exact provider filter; omitted by default.",
+    )
     parser.add_argument(
         "--stage",
         action="append",
