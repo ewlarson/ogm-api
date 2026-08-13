@@ -456,16 +456,9 @@ def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
 
 def _looks_like_manifest_url(url: str) -> bool:
     """Heuristic to detect IIIF manifest URLs by path patterns."""
-    if not url:
-        return False
-    lowered = url.lower()
-    return (
-        url.endswith(("/iiif3/manifest", "/iiif/manifest", "/manifest", "manifest.json"))
-        or "/manifest" in url
-        or (".json" in url and ("iiif" in lowered or "/object/" in url or "/collection/" in url))
-        or ("/api/" in url and ("iiif" in lowered or "image" in lowered))
-        or "/cgi/i/image/api/" in lowered  # U of Michigan pattern
-    )
+    from app.services.iiif_url import is_iiif_manifest_url
+
+    return is_iiif_manifest_url(url)
 
 
 def _validate_image_content(
@@ -1158,8 +1151,18 @@ def generate_pmtiles_thumbnail(self, pmtiles_url: str, doc_id: Optional[str] = N
 
 
 def _resolve_image_url(url: str) -> str:
-    """Resolve the URL to an actual image URL if given a manifest; otherwise return the original."""
+    """Resolve IIIF metadata URLs to supported image renditions."""
     try:
+        from app.services.iiif_url import is_iiif_info_url
+
+        if is_iiif_info_url(url):
+            from app.services.image_service import ImageService
+
+            service = ImageService({})
+            image_url = service.get_iiif_image_thumbnail(url)
+            if image_url:
+                return image_url
+
         # Only run manifest resolution when it looks like a manifest URL
         if _looks_like_manifest_url(url):
             from app.services.image_service import ImageService
