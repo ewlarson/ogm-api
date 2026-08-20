@@ -49,3 +49,16 @@ def test_kamal_cron_role_and_crontab_are_wired():
     assert "cron" in dockerfile
     assert "COPY config/crontab ./config/crontab" in dockerfile
     assert "start_cron.sh" in dockerfile
+
+
+def test_kamal_accessory_directories_preserve_live_production_binds():
+    base_config = _load_deploy_config("config/deploy.yml")
+    accessories = base_config["accessories"]
+
+    assert accessories["elasticsearch"]["directories"] == [
+        "esdata:/usr/share/elasticsearch/data"
+    ]
+    assert accessories["postgres"]["directories"] == [
+        "pgdata:/var/lib/postgresql/data"
+    ]
+    assert accessories["redis"]["directories"] == ["redisdata:/data"]

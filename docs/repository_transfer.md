@@ -60,12 +60,18 @@ The following values are intentionally frozen through the repository transfer:
 | Registry and login owner | `ghcr.io`, `ewlarson` |
 | Elasticsearch index | `opengeometadata_api` |
 | PostgreSQL database | `btaa_ogm_api` |
-| Elasticsearch volume | `/var/lib/opengeometadata-api/elasticsearch` |
-| PostgreSQL volume | `/var/lib/opengeometadata-api/postgres` |
-| Redis volume | `/var/lib/opengeometadata-api/redis` |
+| Elasticsearch directory source | `esdata` (resolves to `/home/ewlarson/ogm-api-elasticsearch/esdata`) |
+| PostgreSQL directory source | `pgdata` (resolves to `/home/ewlarson/ogm-api-postgres/pgdata`) |
+| Redis directory source | `redisdata` (resolves to `/home/ewlarson/ogm-api-redis/redisdata`) |
 
 The legacy PostgreSQL database name is persistent identity, not public project
 branding. Rename it only in a separate, backed-up database migration.
+
+The relative Kamal directory source names are also persistent identity. Kamal
+expands them under the deployment user's home directory using the service and
+accessory names. Replacing them with a different absolute host path would make
+an accessory reboot mount a different data directory, even though an ordinary
+repository transfer does not restart the existing containers.
 
 Run the local invariant checks before and after every preparation commit:
 
