@@ -1,4 +1,4 @@
-.PHONY: lint format lint-check test test-fast test-no-coverage migrate reindex gazetteers ogm-nightly cache-prime cache-prime-background kamal-registry-login
+.PHONY: lint format lint-check test test-fast test-no-coverage migrate reindex gazetteers ogm-nightly cache-prime cache-prime-background kamal-registry-login transfer-readiness transfer-readiness-full
 
 BACKEND_DIR = backend
 
@@ -48,3 +48,9 @@ cache-prime-background:
 
 kamal-registry-login:
 	./scripts/kamal_registry_login.sh
+
+transfer-readiness:
+	./scripts/verify_transfer_readiness.sh
+
+transfer-readiness-full:
+	./scripts/verify_transfer_readiness.sh --full-history

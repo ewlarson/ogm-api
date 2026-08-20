@@ -653,9 +653,7 @@ class TestImageServiceThumbnailSourceURL:
         service = ImageService(
             {
                 "id": "test-doc",
-                "dct_references_s": json.dumps(
-                    {"http://schema.org/thumbnailUrl": source_url}
-                ),
+                "dct_references_s": json.dumps({"http://schema.org/thumbnailUrl": source_url}),
             }
         )
 

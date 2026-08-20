@@ -135,6 +135,9 @@ venv.bak/
 # Kamal
 .kamal/
 
+# Generated visual assets are runtime cache data, never repository source.
+backend/static/maps/
+
 # Spyder project settings
 .spyderproject
 .spyproject

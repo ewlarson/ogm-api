@@ -19,15 +19,16 @@ from mcp.types import (
 )
 from sqlalchemy import func, select
 
+from app.identity import API_NAME, API_SLUG, API_VERSION
 from app.services.search_service import SearchService
 from db.models import resources
 from db.session import async_session as app_async_session
 
 logger = logging.getLogger(__name__)
 
-MCP_SERVICE_NAME = "btaa-geospatial-api"
-MCP_SERVICE_VERSION = "0.7.0"
-MCP_SERVICE_DESCRIPTION = "BTAA Geospatial API MCP Service"
+MCP_SERVICE_NAME = API_SLUG
+MCP_SERVICE_VERSION = API_VERSION
+MCP_SERVICE_DESCRIPTION = f"{API_NAME} MCP Service"
 
 
 def get_async_session():
@@ -91,15 +92,15 @@ def _api_response_error_type(payload: dict[str, Any]) -> str:
 
 
 class OGMMCPService:
-    """MCP service for GeoBTAA API endpoints."""
+    """MCP service for OpenGeoMetadata API endpoints."""
 
     def __init__(self):
-        logger.info("Initializing GeoBTAA MCP Service")
+        logger.info("Initializing OpenGeoMetadata MCP Service")
         self.server = Server(MCP_SERVICE_NAME)
         self.tool_specs = self._build_tool_specs()
         self.tool_handlers = self._build_tool_handlers()
         self._register_tools()
-        logger.info("GeoBTAA MCP Service initialized successfully")
+        logger.info("OpenGeoMetadata MCP Service initialized successfully")
 
     def _build_tool_specs(self) -> list[dict[str, Any]]:
         """Single source of truth for MCP tool metadata."""
@@ -720,8 +721,10 @@ class OGMMCPService:
 
     def _public_api_base(self) -> str:
         """Resolve base URL for calling this API over HTTP."""
-        base = os.getenv("BTAA_GEOSPATIAL_API_BASE_URL") or os.getenv(
-            "APPLICATION_URL", "http://localhost:8000"
+        base = (
+            os.getenv("OPENGEOMETADATA_API_BASE_URL")
+            or os.getenv("BTAA_GEOSPATIAL_API_BASE_URL")
+            or os.getenv("APPLICATION_URL", "http://localhost:8000")
         )
         base = base.rstrip("/")
         if base.endswith("/api/v1"):
@@ -738,7 +741,7 @@ class OGMMCPService:
         url = f"{self._public_api_base()}/api/v1{path}"
         timeout = aiohttp.ClientTimeout(total=30)
         headers = {}
-        api_key = os.getenv("BTAA_GEOSPATIAL_API_KEY")
+        api_key = os.getenv("OPENGEOMETADATA_API_KEY") or os.getenv("BTAA_GEOSPATIAL_API_KEY")
         if api_key:
             headers["X-API-Key"] = api_key
         async with aiohttp.ClientSession(timeout=timeout) as session:

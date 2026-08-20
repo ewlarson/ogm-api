@@ -14,7 +14,7 @@ OGC_CONFORMS_TO = [
 class OGCResponseProjector:
     @staticmethod
     def map_record_to_properties(attributes: Dict[str, Any]) -> Dict[str, Any]:
-        """Maps internal BTAA/Aardvark fields to public OGC properties."""
+        """Map internal OpenGeoMetadata Aardvark fields to public OGC properties."""
 
         # Ensure lists are unwrapped where we expect single values, if they are stored as lists
         description = attributes.get("dct_description_sm")
@@ -71,7 +71,7 @@ class OGCResponseProjector:
                     "href": f"{base_url}/api/v1/resources/{item_id}",
                     "rel": "alternate",
                     "type": "application/json",
-                    "title": "BTAA Native API Response",
+                    "title": "OpenGeoMetadata Native API Response",
                 },
             ],
         }
@@ -82,8 +82,8 @@ class OGCResponseProjector:
         base_url = request_url.rstrip("/")
 
         return {
-            "title": "BTAA Geospatial API - OGC API Records",
-            "description": "OGC API Records facade for the BTAA Geospatial API",
+            "title": "OpenGeoMetadata API - OGC API Records",
+            "description": "OGC API Records facade for the OpenGeoMetadata API",
             "links": [
                 {
                     "href": f"{base_url}/",
@@ -136,8 +136,8 @@ class OGCResponseProjector:
 
         return {
             "id": collection_id,
-            "title": "BTAA Geospatial Records",
-            "description": "Records aggregated from BTAA institutions.",
+            "title": "OpenGeoMetadata Records",
+            "description": "Community-maintained OpenGeoMetadata Aardvark records.",
             "itemType": "record",
             "links": [
                 {
@@ -242,7 +242,7 @@ class OGCResponseProjector:
             "$schema": "https://json-schema.org/draft/2019-09/schema",
             "$id": request_url,
             "type": "object",
-            "title": "Queryables for BTAA Geospatial Records",
+            "title": "Queryables for OpenGeoMetadata Records",
             "properties": {
                 "id": {"type": "string"},
                 "title": {"type": "string"},
@@ -267,7 +267,7 @@ class OGCResponseProjector:
             "$schema": "https://json-schema.org/draft/2019-09/schema",
             "$id": request_url,
             "type": "object",
-            "title": "Sortables for BTAA Geospatial Records",
+            "title": "Sortables for OpenGeoMetadata Records",
             "properties": {
                 "title": {"type": "string"},
                 "modified": {"type": "string"},

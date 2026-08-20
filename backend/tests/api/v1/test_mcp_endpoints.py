@@ -33,9 +33,9 @@ class TestMCPEndpoints:
         data = response.json()
 
         # Check basic service information
-        assert data["name"] == "btaa-geospatial-api"
+        assert data["name"] == "opengeometadata-api"
         assert data["version"] == "0.7.0"
-        assert data["description"] == "BTAA Geospatial API MCP Service"
+        assert data["description"] == "OpenGeoMetadata API MCP Service"
         assert data["protocol"] == "mcp"
         assert "stdio" in data["transports"]
         assert "websocket" in data["transports"]
@@ -180,7 +180,7 @@ class TestMCPEndpoints:
         data = response.json()
         assert data["jsonrpc"] == "2.0"
         assert data["id"] == 1
-        assert data["result"]["serverInfo"]["name"] == "btaa-geospatial-api"
+        assert data["result"]["serverInfo"]["name"] == "opengeometadata-api"
 
     def test_mcp_http_transport_tools_list(self):
         """Test JSON-RPC tools/list over HTTP POST."""

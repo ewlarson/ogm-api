@@ -748,7 +748,13 @@ def _build_bbox_overlap_filter(
     q_maxy: float,
     min_overlap_ratio: float,
 ) -> dict:
-    """Filter out trivial bbox overlaps using IoU overlap ratio."""
+    """Filter out overlaps covering only a trivial fraction of the document bbox.
+
+    The configuration and parameter names retain ``overlap``/``IoU`` for backward
+    compatibility, but eligibility must be based on document containment. Using IoU
+    here incorrectly rejects small resources that are fully inside a much larger
+    search area because the query area dominates the union.
+    """
     return {
         "script": {
             "script": {
@@ -791,13 +797,13 @@ def _build_bbox_overlap_filter(
                         return false;
                     }
 
-                    double unionArea = docArea + queryArea - intersection;
-                    if (unionArea <= 0.0) {
-                        return false;
-                    }
-
-                    double overlapRatio = intersection / unionArea;
-                    return overlapRatio >= params.minOverlapRatio;
+                    // Measure how much of the resource extent is covered by the
+                    // query. A small city dataset fully inside a state-sized query
+                    // should remain eligible even though its IoU is near zero.
+                    // Conversely, a state-sized query touching only a tiny piece
+                    // of a global resource should still be rejected.
+                    double docContainmentRatio = intersection / docArea;
+                    return docContainmentRatio >= params.minOverlapRatio;
                 """,
                 "params": {
                     "qMinX": q_minx,
@@ -3038,14 +3044,11 @@ async def find_similar_resources(resource_id: str, limit: int = 12) -> list:
     index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
 
     try:
-        # First, check if the resource exists in Elasticsearch
-        try:
-            doc = await es.get(index=index_name, id=resource_id)
-            if not doc:
-                logger.warning(f"Resource {resource_id} not found in Elasticsearch")
-                return []
-        except NotFoundError:
-            logger.warning(f"Resource {resource_id} not found in Elasticsearch")
+        # Use HEAD/exists instead of GET so retired database records that are
+        # intentionally absent from the search index do not create traced 404s.
+        resource_exists = await es.exists(index=index_name, id=resource_id)
+        if not resource_exists:
+            logger.warning("Resource %s not found in Elasticsearch", resource_id)
             return []
 
         # Build more_like_this query
