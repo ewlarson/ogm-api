@@ -43,6 +43,7 @@ from app.api.errors import (
 from app.api.ogc import router as ogc_router
 from app.api.v1.endpoints import router as public_router
 from app.elasticsearch import close_elasticsearch, init_elasticsearch
+from app.identity import API_NAME, API_VERSION
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
 from app.middleware.turnstile_middleware import TurnstileMiddleware
 from app.services.sitemap_service import (
@@ -51,7 +52,7 @@ from app.services.sitemap_service import (
     build_x_robots_tag,
     close_store,
     generate_and_store,
-    get_sitemap_document,
+    get_current_sitemap_document,
     is_valid_sitemap_part_name,
 )
 from db.async_engine import dispose_app_async_engines
@@ -150,8 +151,8 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI application
 app = FastAPI(
-    title="BTAA Geospatial API",
-    version="0.7.0",
+    title=API_NAME,
+    version=API_VERSION,
     lifespan=lifespan,
     docs_url=None,
     redoc_url="/api/redoc",
@@ -268,7 +269,7 @@ async def api_v1_no_slash_redirect():
 
 @app.get("/sitemap.xml", include_in_schema=False)
 async def sitemap_xml() -> Response:
-    xml_content = await get_sitemap_document(SITEMAP_ROOT_NAME)
+    xml_content = await get_current_sitemap_document(SITEMAP_ROOT_NAME)
     if xml_content is None:
         result, _stored = await generate_and_store()
         xml_content = result.documents[SITEMAP_ROOT_NAME]
@@ -284,7 +285,7 @@ async def sitemap_part_xml(filename: str) -> Response:
     if not is_valid_sitemap_part_name(part_name):
         raise HTTPException(status_code=404, detail="Sitemap part not found")
 
-    xml_content = await get_sitemap_document(part_name)
+    xml_content = await get_current_sitemap_document(part_name)
     if xml_content is None:
         result, _stored = await generate_and_store()
         xml_content = result.documents.get(part_name)
@@ -411,7 +412,7 @@ async def custom_docs(request: Request) -> HTMLResponse:
             "docs.html",
             {
                 "request": request,
-                "title": "BTAA Geospatial API — Endpoints",
+                "title": f"{API_NAME} — Endpoints",
                 "openapi_url": app.openapi_url,
             },
         )

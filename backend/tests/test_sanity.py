@@ -29,7 +29,7 @@ def test_api_docs_available():
     assert (
         "swagger" in response.text.lower()
         or "openapi" in response.text.lower()
-        or "btaa geospatial api" in response.text.lower()
+        or "opengeometadata api" in response.text.lower()
     )
 
 
@@ -54,4 +54,4 @@ def test_api_version():
     assert "attributes" in data["data"]
     assert "version" in data["data"]["attributes"]
     assert "api" in data["data"]["attributes"]
-    assert data["data"]["attributes"]["api"] == "BTAA Geospatial API"
+    assert data["data"]["attributes"]["api"] == "OpenGeoMetadata API"

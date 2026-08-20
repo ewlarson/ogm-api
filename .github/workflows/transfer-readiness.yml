@@ -1,0 +1,19 @@
+name: Transfer Readiness
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  invariants:
+    name: Check repository and deployment invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify transfer preparation
+        run: ./scripts/verify_transfer_readiness.sh

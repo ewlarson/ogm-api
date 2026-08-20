@@ -1,6 +1,6 @@
 from appsignal import Appsignal
 
 appsignal = Appsignal(
-    name="BTAA Geospatial API - Dev",
+    name="OpenGeoMetadata API - Dev",
     active=True,
 )

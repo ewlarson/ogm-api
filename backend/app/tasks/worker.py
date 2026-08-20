@@ -69,9 +69,7 @@ THUMBNAIL_JPEG_QUALITY = int(os.getenv("THUMBNAIL_JPEG_QUALITY", "78"))
 REMOTE_THUMBNAIL_PREFIX = f"remote-thumb-normalized:{THUMBNAIL_CACHE_VERSION}:"
 PDF_THUMBNAIL_PREFIX = "pdf-thumb:"
 PDF_THUMBNAIL_MAX_BYTES = int(os.getenv("PDF_THUMBNAIL_MAX_BYTES", str(32 * 1024 * 1024)))
-REMOTE_THUMBNAIL_MAX_BYTES = int(
-    os.getenv("REMOTE_THUMBNAIL_MAX_BYTES", str(20 * 1024 * 1024))
-)
+REMOTE_THUMBNAIL_MAX_BYTES = int(os.getenv("REMOTE_THUMBNAIL_MAX_BYTES", str(20 * 1024 * 1024)))
 
 # Setup Celery
 broker_url = os.getenv(
@@ -262,9 +260,7 @@ def _persist_thumbnail_bytes(
 
     redis_stored = False
     try:
-        redis_stored = bool(
-            cache_visual_asset(redis_client, f"image:{image_hash}", image_bytes)
-        )
+        redis_stored = bool(cache_visual_asset(redis_client, f"image:{image_hash}", image_bytes))
         cache_visual_asset(redis_client, f"image_type:{image_hash}", content_type)
     except Exception as exc:
         logger.warning("Redis thumbnail hydration failed for %s: %s", image_hash[:12], exc)

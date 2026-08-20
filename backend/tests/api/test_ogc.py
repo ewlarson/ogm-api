@@ -12,7 +12,7 @@ def test_ogc_landing_page():
     assert response.status_code == 200
     data = response.json()
     assert "links" in data
-    assert data["title"] == "BTAA Geospatial API - OGC API Records"
+    assert data["title"] == "OpenGeoMetadata API - OGC API Records"
 
 
 def test_ogc_conformance():
