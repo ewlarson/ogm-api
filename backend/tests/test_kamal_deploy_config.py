@@ -55,10 +55,6 @@ def test_kamal_accessory_directories_preserve_live_production_binds():
     base_config = _load_deploy_config("config/deploy.yml")
     accessories = base_config["accessories"]
 
-    assert accessories["elasticsearch"]["directories"] == [
-        "esdata:/usr/share/elasticsearch/data"
-    ]
-    assert accessories["postgres"]["directories"] == [
-        "pgdata:/var/lib/postgresql/data"
-    ]
+    assert accessories["elasticsearch"]["directories"] == ["esdata:/usr/share/elasticsearch/data"]
+    assert accessories["postgres"]["directories"] == ["pgdata:/var/lib/postgresql/data"]
     assert accessories["redis"]["directories"] == ["redisdata:/data"]
