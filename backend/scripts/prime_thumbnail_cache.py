@@ -88,9 +88,7 @@ logger = logging.getLogger(__name__)
 
 USER_AGENT = "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"
 FALLBACK_ICON_DETAIL = "OGM resource-class fallback icon materialized"
-REMOTE_THUMBNAIL_MAX_BYTES = int(
-    os.getenv("REMOTE_THUMBNAIL_MAX_BYTES", str(20 * 1024 * 1024))
-)
+REMOTE_THUMBNAIL_MAX_BYTES = int(os.getenv("REMOTE_THUMBNAIL_MAX_BYTES", str(20 * 1024 * 1024)))
 
 
 def _thumbnail_fetch_timeout() -> int:

@@ -85,7 +85,7 @@ class TestRootEndpoints:
 
         # Check attributes
         attributes = api_info["attributes"]
-        assert attributes["api"] == "BTAA Geospatial API"
+        assert attributes["api"] == "OpenGeoMetadata API"
         assert attributes["version"] == "0.7.0"
         assert "description" in attributes
         assert "endpoints" in attributes
@@ -123,8 +123,8 @@ class TestRootEndpoints:
         attributes = data["data"]["attributes"]
         description = attributes["description"]
 
-        assert "Big Ten Academic Alliance" in description
-        assert "geospatial" in description
+        assert "OpenGeoMetadata" in description
+        assert "Aardvark" in description
 
     def test_api_root_version(self):
         """Test API root version."""

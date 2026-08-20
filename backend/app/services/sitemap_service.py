@@ -172,6 +172,11 @@ def _application_url(base_url: str | None = None) -> str:
     return normalized
 
 
+def current_application_url() -> str:
+    """Return the canonical public origin used by newly generated sitemaps."""
+    return _application_url()
+
+
 def _env_flag(name: str) -> bool | None:
     raw_value = os.getenv(name)
     if raw_value is None:
@@ -458,6 +463,19 @@ async def store_sitemap_documents(
 
 async def get_sitemap_manifest() -> dict[str, Any] | None:
     return await _store.get_json(SITEMAP_MANIFEST_KEY)
+
+
+async def get_current_sitemap_document(name: str) -> str | None:
+    """Return a cached sitemap only when it was generated for this origin."""
+    manifest = await get_sitemap_manifest()
+    if isinstance(manifest, dict) and manifest.get("application_url") != current_application_url():
+        logger.info(
+            "Ignoring cached sitemap %s generated for application_url=%s",
+            name,
+            manifest.get("application_url"),
+        )
+        return None
+    return await get_sitemap_document(name)
 
 
 async def get_sitemap_document(name: str) -> str | None:

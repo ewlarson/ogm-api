@@ -62,7 +62,7 @@ def test_resource_endpoint_structure():
 
     # Verify the main app structure
     assert hasattr(app, "title")
-    assert app.title == "BTAA Geospatial API"
+    assert app.title == "OpenGeoMetadata API"
 
 
 @pytest.mark.unit

@@ -113,11 +113,15 @@ async def _fetch_resource_batch(
     provider: str | None = None,
 ) -> list[dict[str, Any]]:
     async with async_session_factory() as session:
-        stmt = _apply_resource_filters(
-            select(resources.c.id, resources.c.locn_geometry, resources.c.dcat_bbox),
-            resource_class=resource_class,
-            provider=provider,
-        ).order_by(resources.c.id).limit(batch_size)
+        stmt = (
+            _apply_resource_filters(
+                select(resources.c.id, resources.c.locn_geometry, resources.c.dcat_bbox),
+                resource_class=resource_class,
+                provider=provider,
+            )
+            .order_by(resources.c.id)
+            .limit(batch_size)
+        )
         if last_id is not None:
             stmt = stmt.where(resources.c.id > last_id)
         result = await session.execute(stmt)

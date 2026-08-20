@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ewlarson/opengeometadata-api:0.6.0
+    image: opengeometadata-api:dev
     container_name: opengeometadata-api-app
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@paradedb:5432/opengeometadata_api

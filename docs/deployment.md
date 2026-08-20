@@ -9,7 +9,7 @@ The OGM API is deployed to production using Kamal, which orchestrates Docker con
 - **Web Service**: FastAPI application (Python/uvicorn)
 - **Worker Service**: Celery worker for OGM harvests, cache jobs, and async processing
 - **Accessories** (supporting services):
-  - ParadeDB/PostgreSQL database
+  - PostgreSQL database
   - Elasticsearch search engine
   - Redis cache/message broker
 
@@ -222,7 +222,7 @@ elasticsearch:
 - Single-node configuration
 - 2GB heap size
 - Security disabled (bound to localhost only)
-- Data persisted to `esdata` volume
+- Data persisted at `/var/lib/opengeometadata-api/elasticsearch` on the host
 
 ### PostgreSQL
 
@@ -237,7 +237,7 @@ postgres:
 - Existing PostgreSQL 15 accessory used by the current production deployment
 - Initialized via `config/init.sql`
 - FAST vector embeddings are disabled in Kamal by default because the current production database image does not expose the `vector` extension
-- Data persisted to `pgdata` volume
+- Data persisted at `/var/lib/opengeometadata-api/postgres` on the host
 
 ### Redis
 
@@ -251,7 +251,7 @@ redis:
 - Append-only file (AOF) persistence enabled
 - Current production accessory runs without Redis AUTH; the app should omit
   `REDIS_PASSWORD` unless/until the accessory is explicitly recreated with auth
-- Data persisted to `redisdata` volume
+- Data persisted at `/var/lib/opengeometadata-api/redis` on the host
 
 ## Deployment Commands
 
@@ -487,33 +487,42 @@ kamal app exec "python /app/backend/scripts/run_migrations.py"
 
 ### Backup Database
 
-SSH into the server and run:
+Create a logical PostgreSQL backup on the host. A logical dump is safe while
+PostgreSQL is running; copying its live data directory is not:
 
 ```bash
 # SSH to server
 ssh ewlarson@ogm.geo4lib.app
 
-# Create backup
-docker exec ogm-api-postgres pg_dump -U ogm_api_user btaa_ogm_api > backup_$(date +%Y%m%d).sql
+# Create a restricted backup directory and a custom-format dump
+ogm_backup_dir=/var/backups/opengeometadata-api
+sudo install -d -m 700 -o "$(id -un)" -g "$(id -gn)" "$ogm_backup_dir"
+docker exec ogm-api-postgres \
+  pg_dump --format=custom -U ogm_api_user btaa_ogm_api \
+  > "$ogm_backup_dir/postgres-$(date -u +%Y%m%dT%H%M%SZ).dump"
 
-# Compress backup
-gzip backup_$(date +%Y%m%d).sql
+# Confirm the newest dump is non-empty and structurally readable
+ogm_backup_file="$(find "$ogm_backup_dir" -type f -name 'postgres-*.dump' -print | sort | tail -n1)"
+test -s "$ogm_backup_file"
+docker exec -i ogm-api-postgres pg_restore --list < "$ogm_backup_file" >/dev/null
 ```
+
+Copy the verified dump to an access-controlled off-host backup system and
+record its identifier before a deployment or migration window.
 
 ### Restore Database
 
 ```bash
-# Copy backup to server
-scp backup.sql.gz ewlarson@ogm.geo4lib.app:~/
+# Copy a verified custom-format backup to the server
+scp postgres-YYYYMMDDTHHMMSSZ.dump ewlarson@ogm.geo4lib.app:/var/backups/opengeometadata-api/
 
 # SSH to server
 ssh ewlarson@ogm.geo4lib.app
 
-# Decompress
-gunzip backup.sql.gz
-
-# Restore
-cat backup.sql | docker exec -i ogm-api-postgres psql -U ogm_api_user btaa_ogm_api
+# Restore only during an approved recovery window
+docker exec -i ogm-api-postgres \
+  pg_restore --clean --if-exists -U ogm_api_user -d btaa_ogm_api \
+  < /var/backups/opengeometadata-api/postgres-YYYYMMDDTHHMMSSZ.dump
 ```
 
 ## Elasticsearch Operations
@@ -667,15 +676,17 @@ For automated deployments via GitHub Actions or similar:
 6. **SSL certificates**: Kamal handles Let's Encrypt automatically
 7. **Volume security**: Persistent volumes contain sensitive data
 
-## Volumes & Data Persistence
+## Host Directories & Data Persistence
 
-Kamal manages three persistent volumes:
+Kamal bind-mounts three persistent host directories. These paths are stable
+production identity and must not change during a repository or image transfer:
 
-- `esdata`: Elasticsearch index data
-- `pgdata`: PostgreSQL database files
-- `redisdata`: Redis cache data
+- `/var/lib/opengeometadata-api/elasticsearch`: Elasticsearch index data
+- `/var/lib/opengeometadata-api/postgres`: PostgreSQL database files
+- `/var/lib/opengeometadata-api/redis`: Redis append-only cache data
 
-These volumes persist across deployments and container restarts.
+These directories persist across deployments and container restarts. They are
+not Docker named volumes; `docker volume` commands do not back them up.
 
 ### Backing Up Volumes
 
@@ -683,13 +694,15 @@ These volumes persist across deployments and container restarts.
 # SSH to server
 ssh ewlarson@ogm.geo4lib.app
 
-# List volumes
-docker volume ls
-
-# Backup a volume
-docker run --rm -v pgdata:/data -v $(pwd):/backup \
-  alpine tar czf /backup/pgdata_backup.tar.gz /data
+# Confirm the configured directories and mounts
+sudo find /var/lib/opengeometadata-api -maxdepth 1 -type d -print
+docker inspect ogm-api-postgres --format '{{json .Mounts}}'
 ```
+
+Use the logical PostgreSQL procedure above for database backups. Use a
+provider/filesystem snapshot for the three bind directories only with an
+explicit consistency plan. Never archive the live PostgreSQL data directory as
+if it were an ordinary file tree.
 
 ## Performance Tuning
 

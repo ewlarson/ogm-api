@@ -1,14 +1,28 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 set -euo pipefail
 
-VERSION="${1:-}"
-if [ -z "$VERSION" ]; then
-    echo "Please provide a version number (e.g. ./publish.sh 0.6.0)"
+version="${1:-}"
+if [ -z "$version" ]; then
+    echo "Usage: OGM_IMAGE_REPOSITORIES='ghcr.io/owner/image [ghcr.io/owner/image]' $0 VERSION" >&2
     exit 1
 fi
 
-docker build -t ewlarson/opengeometadata-api:latest -t ewlarson/opengeometadata-api:"$VERSION" .
-docker push ewlarson/opengeometadata-api:latest
-docker push ewlarson/opengeometadata-api:"$VERSION"
+read -r -a image_repositories <<< "${OGM_IMAGE_REPOSITORIES:-ghcr.io/ewlarson/opengeometadata-api}"
+if [ "${#image_repositories[@]}" -eq 0 ]; then
+    echo "OGM_IMAGE_REPOSITORIES must contain at least one image repository." >&2
+    exit 1
+fi
 
-echo "Published ewlarson/opengeometadata-api:latest and ewlarson/opengeometadata-api:$VERSION"
+build_tags=()
+for image_repository in "${image_repositories[@]}"; do
+    build_tags+=(--tag "$image_repository:$version" --tag "$image_repository:latest")
+done
+
+docker build "${build_tags[@]}" .
+
+for image_repository in "${image_repositories[@]}"; do
+    docker push "$image_repository:$version"
+    docker push "$image_repository:latest"
+    echo "Published $image_repository:$version and $image_repository:latest"
+done

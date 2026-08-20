@@ -20,7 +20,10 @@ async def test_changed_thumbnail_ids_detects_new_and_changed_sources_only():
     changed = {**existing, "id": "changed"}
     incoming = [
         dict(existing),
-        {**changed, "dct_references_s": '{"http://schema.org/thumbnailUrl":"https://example/b.jpg"}'},
+        {
+            **changed,
+            "dct_references_s": '{"http://schema.org/thumbnailUrl":"https://example/b.jpg"}',
+        },
         {**existing, "id": "new"},
     ]
 
