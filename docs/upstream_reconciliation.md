@@ -51,7 +51,7 @@ policy.
 
 | Upstream commit | Decision | OGM rationale or follow-up |
 | --- | --- | --- |
-| `e95178a` Prepare GTM for production cutover | Not applicable | BTAA frontend analytics and production configuration are outside the OGM mirror API contract. |
+| `e95178a` Prepare GTM for production cutover | **Ported selectively** | Ported the recursive test route helper needed by FastAPI's lazy `include_router` representation and updated route-registration assertions. BTAA frontend analytics and production configuration remain not applicable. |
 | `1433322` Bump API version to 0.8.0 | Not applicable | OGM product versioning is independent. |
 | `a529b3b` Prepare v0.8.1 release | Not applicable | BTAA release bookkeeping is not imported. |
 | `a17b83e` Fix production feedback delivery default | Not applicable | Recipient and mail defaults are operator-specific. |
@@ -91,6 +91,7 @@ The accepted ports are covered by focused tests in:
 - `tests/services/test_sitemap_service.py`
 - `tests/scripts/test_prime_resource_representation_cache.py`
 - `tests/scripts/test_refresh_resource_caches.py`
+- `tests/utils/route_helpers.py`
 
 The complete backend suite is also enforced by `.github/workflows/ci.yml` on
 pull requests and pushes to `develop`.
