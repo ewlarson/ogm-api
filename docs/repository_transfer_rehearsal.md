@@ -88,3 +88,22 @@ Before the actual transfer:
 6. rewrite a fresh mirror of the frozen GitHub repository and require
    `make transfer-readiness-full` to pass in a checkout of the result; and
 7. follow the transfer and rollback sequence in `repository_transfer.md`.
+
+## Change-window preflight correction
+
+The 2026-08-20 live preflight found that the running accessories use the
+original Kamal-resolved bind paths under `/home/ewlarson/ogm-api-*`, while the
+prepared configuration incorrectly named new `/var/lib/opengeometadata-api/*`
+sources. No running container had adopted the new paths. The transfer was
+paused before branch deletion or history rewriting, and the configuration was
+corrected to preserve the original relative directory sources `esdata`,
+`pgdata`, and `redisdata`.
+
+The same preflight confirmed that OpenGeoMetadata permits Actions for all
+repositories, standard hosted runners are enabled, no repository in the
+organization occupies the BTAA fork network, and the personal GHCR package is
+private, remains personal-account scoped, and is not linked to this repository.
+A current logical PostgreSQL dump completed successfully, its permissions were
+restricted to the deployment user, and `pg_restore --list` validated its
+catalog. The private change record holds the backup identifier, byte size,
+checksum, running image digest, and exact live mount inspection output.

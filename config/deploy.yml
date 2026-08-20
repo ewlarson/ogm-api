@@ -98,7 +98,9 @@ accessories:
     # only listen on localhost
     port: "127.0.0.1:9200:9200"
     directories:
-      - /var/lib/opengeometadata-api/elasticsearch:/usr/share/elasticsearch/data
+      # Keep this relative source name: Kamal resolves it to the existing
+      # /home/ewlarson/ogm-api-elasticsearch/esdata production bind.
+      - esdata:/usr/share/elasticsearch/data
 
   postgres:
     image: postgres:15
@@ -115,11 +117,15 @@ accessories:
     files:
       - config/init.sql:/docker-entrypoint-initdb.d/setup.sql
     directories:
-      - /var/lib/opengeometadata-api/postgres:/var/lib/postgresql/data
+      # Keep this relative source name: Kamal resolves it to the existing
+      # /home/ewlarson/ogm-api-postgres/pgdata production bind.
+      - pgdata:/var/lib/postgresql/data
 
   redis:
     image: redis:7.2
     roles: [web]
     cmd: sh -lc 'redis-server --appendonly yes --protected-mode yes --bind 0.0.0.0'
     directories:
-      - /var/lib/opengeometadata-api/redis:/data
+      # Keep this relative source name: Kamal resolves it to the existing
+      # /home/ewlarson/ogm-api-redis/redisdata production bind.
+      - redisdata:/data

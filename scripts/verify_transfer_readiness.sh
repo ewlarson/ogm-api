@@ -62,9 +62,9 @@ expect_exact_line config/deploy.yml "image: $expected_image" 'production image i
 expect_exact_line config/deploy.yml '  host: ogm.geo4lib.app' 'production proxy hostname is unchanged'
 expect_exact_line config/deploy.yml '    ELASTICSEARCH_INDEX:   opengeometadata_api' 'Elasticsearch index is unchanged'
 expect_exact_line config/deploy.yml '        POSTGRES_DB:   btaa_ogm_api' 'PostgreSQL database is unchanged'
-expect_exact_line config/deploy.yml '      - /var/lib/opengeometadata-api/elasticsearch:/usr/share/elasticsearch/data' 'Elasticsearch volume is unchanged'
-expect_exact_line config/deploy.yml '      - /var/lib/opengeometadata-api/postgres:/var/lib/postgresql/data' 'PostgreSQL volume is unchanged'
-expect_exact_line config/deploy.yml '      - /var/lib/opengeometadata-api/redis:/data' 'Redis volume is unchanged'
+expect_exact_line config/deploy.yml '      - esdata:/usr/share/elasticsearch/data' 'Elasticsearch volume is unchanged'
+expect_exact_line config/deploy.yml '      - pgdata:/var/lib/postgresql/data' 'PostgreSQL volume is unchanged'
+expect_exact_line config/deploy.yml '      - redisdata:/data' 'Redis volume is unchanged'
 
 for role in web worker cron; do
     if grep -Eq "^  ${role}:$" config/deploy.yml; then
