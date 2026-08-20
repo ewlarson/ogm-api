@@ -33,6 +33,20 @@ OGM releases and BTAA source provenance are separate concepts.
 6. Update `config/geobtaa-backend-source.env` only for a complete applied
    subtree import. Selective ports remain documented here instead.
 
+## Baseline CI coverage
+
+The recorded `v0.7.16` backend baseline postdates BTAA commit `44411cf`, which
+introduced the repository-level CI workflow. The backend subtree import could
+not carry that top-level workflow, so this repository now ports its compatible
+backend job separately in `.github/workflows/ci.yml`.
+
+The port runs the complete Python suite with ParadeDB, Elasticsearch, Redis,
+parallel workers, a wall-clock watchdog, and a 50% coverage floor. BTAA's
+frontend, CLI, QGIS plugin, and MkDocs jobs are intentionally excluded because
+those products are not present in this backend-only repository. Action
+dependencies are pinned to immutable commits to satisfy the transfer-readiness
+policy.
+
 ## Decision ledger: `v0.7.16` through `0.8.11`
 
 | Upstream commit | Decision | OGM rationale or follow-up |
@@ -56,7 +70,7 @@ OGM releases and BTAA source provenance are separate concepts.
 | `a545109` Handle Bridge tombstone deletes | Defer | Useful design input for deletion semantics, but the implementation is coupled to Kithe Bridge. |
 | `b8098a0` Bump version to 0.8.7 | Not applicable | BTAA release bookkeeping is not imported. |
 | `6f4b73b` Refresh project dependencies | Dependency review | Produce a fresh OGM dependency PR with lockfile, license, vulnerability, and runtime verification. |
-| `721ea3b` Adjust response handling and file checks | Port selectively | Generic error sanitization and file checks are candidates; Slack, admin, and BTAA response labels require endpoint-by-endpoint review. |
+| `721ea3b` Adjust response handling and file checks | **Ported selectively** | The production-database test now accepts both the legacy `error` and FastAPI `detail` missing-resource envelopes, as required by the full CI suite. Broader Slack, admin, and BTAA response-label changes remain deferred. |
 | `93f73d6` Use local Postgres backups in production | Design reference | Mirror backup/rebuild behavior belongs in the OGM operating runbook and secret model, not as a blind BTAA script import. |
 | `0a24422` Bump version to 0.8.8 | Not applicable | BTAA release bookkeeping is not imported. |
 | `d991db3` Bump version to 0.8.9 | Not applicable | BTAA release bookkeeping is not imported. |
@@ -77,6 +91,9 @@ The accepted ports are covered by focused tests in:
 - `tests/services/test_sitemap_service.py`
 - `tests/scripts/test_prime_resource_representation_cache.py`
 - `tests/scripts/test_refresh_resource_caches.py`
+
+The complete backend suite is also enforced by `.github/workflows/ci.yml` on
+pull requests and pushes to `develop`.
 
 Before the next upstream review, fetch `upstream`, choose a new immutable review
 ceiling, append every backend-affecting commit to this ledger, and keep earlier

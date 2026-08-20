@@ -128,6 +128,11 @@ make test
 make lint-check
 ```
 
+Pull requests and pushes to `develop` run the complete backend suite in GitHub
+Actions against isolated ParadeDB, Elasticsearch, and Redis services. The CI
+job also produces a coverage artifact and enforces a 50% application coverage
+floor.
+
 The nightly reconciliation path is the correctness mechanism. Webhooks reduce
 freshness latency but must not be the only way a mirror discovers changes.
 
