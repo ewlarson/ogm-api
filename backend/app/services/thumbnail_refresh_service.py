@@ -103,9 +103,7 @@ async def refresh_thumbnail_cache_for_changed_resources(
             [f"resource:{resource_id}" for resource_id in resource_id_batch]
         )
         resource_dicts = await _fetch_resources(resource_id_batch)
-        thumbnail_totals.update(
-            await _prime_resources(resource_dicts, concurrency=concurrency)
-        )
+        thumbnail_totals.update(await _prime_resources(resource_dicts, concurrency=concurrency))
 
     return {
         "enabled": True,

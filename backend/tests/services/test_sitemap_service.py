@@ -8,6 +8,7 @@ from app.services.sitemap_service import (
     build_robots_txt,
     build_sitemap_documents,
     build_x_robots_tag,
+    get_current_sitemap_document,
 )
 
 NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
@@ -88,6 +89,18 @@ def test_build_robots_txt_strips_api_suffix_from_application_url(monkeypatch):
 def test_build_x_robots_tag_disables_indexing_when_feature_flag_is_off():
     assert build_x_robots_tag(indexing_enabled=False) == NOINDEX_ROBOTS_TAG
     assert build_x_robots_tag(indexing_enabled=True) is None
+
+
+async def test_get_current_sitemap_document_ignores_stale_application_url(monkeypatch):
+    async def fake_get_json(key: str):
+        if key.endswith(":manifest"):
+            return {"application_url": "https://previous-ogm-origin.example.org"}
+        return {"content": "<stale />"}
+
+    monkeypatch.setenv("APPLICATION_URL", "https://ogm.geo4lib.app")
+    monkeypatch.setattr("app.services.sitemap_service._store.get_json", fake_get_json)
+
+    assert await get_current_sitemap_document("sitemap.xml") is None
 
 
 def test_build_sitemap_documents_renders_single_urlset():
