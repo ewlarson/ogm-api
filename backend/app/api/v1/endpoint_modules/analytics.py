@@ -31,10 +31,10 @@ def _request_defaults(request: Request) -> Dict[str, Any]:
     headers = request.headers
     return {
         "visit_token": headers.get("X-Visit-Token"),
-        "client_name": headers.get("X-BTAA-Client-Name"),
-        "client_version": headers.get("X-BTAA-Client-Version"),
-        "client_channel": headers.get("X-BTAA-Client-Channel"),
-        "client_instance": headers.get("X-BTAA-Client-Instance"),
+        "client_name": headers.get("X-OGM-Client-Name"),
+        "client_version": headers.get("X-OGM-Client-Version"),
+        "client_channel": headers.get("X-OGM-Client-Channel"),
+        "client_instance": headers.get("X-OGM-Client-Instance"),
         "source_host": _extract_source_host(
             headers.get("Origin"),
             headers.get("Referer"),

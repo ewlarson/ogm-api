@@ -99,7 +99,7 @@ def _search_error_type(error: object) -> str:
 
 class SearchService:
     def __init__(self):
-        self.index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+        self.index_name = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
         self.es = es
 
     async def search(

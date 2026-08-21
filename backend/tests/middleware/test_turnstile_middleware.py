@@ -50,7 +50,7 @@ def test_turnstile_middleware_allows_requests_when_disabled(monkeypatch):
     ("method", "path", "headers", "params", "json"),
     [
         ("GET", "/api/v1/search", {}, None, None),
-        ("GET", "/api/v1/search", {"Origin": "https://gin.btaa.org"}, None, None),
+        ("GET", "/api/v1/search", {"Origin": "https://ogm.geo4lib.app"}, None, None),
         (
             "GET",
             "/api/v1/search",
@@ -61,7 +61,7 @@ def test_turnstile_middleware_allows_requests_when_disabled(monkeypatch):
         (
             "GET",
             "/api/v1/search",
-            {"Referer": "https://gin.btaa.org/api/specification/endpoints/"},
+            {"Referer": "https://ogm.geo4lib.app/api/docs"},
             None,
             None,
         ),
@@ -75,7 +75,7 @@ def test_turnstile_middleware_allows_requests_when_disabled(monkeypatch):
         (
             "GET",
             "/api/v1/search",
-            {"X-BTAA-Client-Channel": "documentation"},
+            {"X-OGM-Client-Channel": "documentation"},
             None,
             None,
         ),
@@ -123,7 +123,7 @@ def test_turnstile_middleware_bypasses_localhost_when_local_turnstile_not_enable
     monkeypatch.setattr(TurnstileService, "is_session_valid", session_invalid)
 
     client = TestClient(_make_app(), base_url="http://localhost")
-    response = client.get("/api/v1/search", headers={"X-BTAA-Client-Channel": "browser"})
+    response = client.get("/api/v1/search", headers={"X-OGM-Client-Channel": "browser"})
 
     assert response.status_code == 200
 
@@ -141,7 +141,7 @@ def test_turnstile_middleware_challenges_localhost_when_local_turnstile_enabled(
     monkeypatch.setattr(TurnstileService, "is_session_valid", session_invalid)
 
     client = TestClient(_make_app(), base_url="http://localhost")
-    response = client.get("/api/v1/search", headers={"X-BTAA-Client-Channel": "browser"})
+    response = client.get("/api/v1/search", headers={"X-OGM-Client-Channel": "browser"})
 
     assert response.status_code == 403
     assert response.json()["error"] == "turnstile_required"
@@ -156,7 +156,7 @@ def test_turnstile_middleware_allows_verified_session(monkeypatch):
     monkeypatch.setattr(TurnstileService, "is_session_valid", session_valid)
 
     client = TestClient(_make_app())
-    response = client.get("/api/v1/search", headers={"X-BTAA-Client-Channel": "browser"})
+    response = client.get("/api/v1/search", headers={"X-OGM-Client-Channel": "browser"})
 
     assert response.status_code == 200
 
@@ -187,8 +187,8 @@ def test_turnstile_middleware_bypasses_cli_requests_without_api_key(monkeypatch)
     response = client.get(
         "/api/v1/search",
         headers={
-            "X-BTAA-Client-Name": "btaa-geo-api-cli",
-            "X-BTAA-Client-Channel": "cli",
+            "X-OGM-Client-Name": "ogm-api-cli",
+            "X-OGM-Client-Channel": "cli",
         },
     )
 
@@ -206,7 +206,7 @@ def test_turnstile_middleware_bypasses_cli_user_agent_without_api_key(monkeypatc
     client = TestClient(_make_app())
     response = client.get(
         "/api/v1/search",
-        headers={"User-Agent": "BTAA-Geo-API-CLI/0.1.0"},
+        headers={"User-Agent": "OGM-Geo-API-CLI/0.1.0"},
     )
 
     assert response.status_code == 200
@@ -223,7 +223,7 @@ def test_turnstile_middleware_bypasses_qgis_user_agent_without_api_key(monkeypat
     client = TestClient(_make_app())
     response = client.get(
         "/api/v1/search",
-        headers={"User-Agent": "BTAA-QGIS-Plugin/0.1.0"},
+        headers={"User-Agent": "OGM-QGIS-Plugin/0.1.0"},
     )
 
     assert response.status_code == 200
@@ -232,31 +232,31 @@ def test_turnstile_middleware_bypasses_qgis_user_agent_without_api_key(monkeypat
 @pytest.mark.parametrize(
     ("headers", "params"),
     [
-        ({"X-BTAA-Client-Channel": "browser"}, None),
-        ({"X-BTAA-Turnstile-Gate": "frontend-search"}, None),
+        ({"X-OGM-Client-Channel": "browser"}, None),
+        ({"X-OGM-Turnstile-Gate": "frontend-search"}, None),
         ({"X-Visit-Token": "visit-token"}, None),
         (
             {
                 "Origin": "https://lib-geoportal-prd-web-01.oit.umn.edu",
-                "X-BTAA-Client-Channel": "browser",
+                "X-OGM-Client-Channel": "browser",
             },
             None,
         ),
         (
             {
                 "X-API-Key": "frontend-key",
-                "X-BTAA-Turnstile-Gate": "frontend-search",
+                "X-OGM-Turnstile-Gate": "frontend-search",
             },
             None,
         ),
         (
             {
-                "X-BTAA-Client-Channel": "script",
-                "X-BTAA-Turnstile-Gate": "frontend-search",
+                "X-OGM-Client-Channel": "script",
+                "X-OGM-Turnstile-Gate": "frontend-search",
             },
             None,
         ),
-        ({"X-BTAA-Client-Channel": "browser"}, {"api_key": "frontend-key"}),
+        ({"X-OGM-Client-Channel": "browser"}, {"api_key": "frontend-key"}),
     ],
 )
 def test_turnstile_middleware_challenges_frontend_gate_requests_without_session(

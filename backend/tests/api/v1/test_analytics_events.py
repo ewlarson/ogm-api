@@ -50,11 +50,11 @@ async def test_analytics_events_endpoint_queues_normalized_batch(async_client):
             content=json.dumps(payload),
             headers={
                 "Content-Type": "text/plain;charset=UTF-8",
-                "Origin": "https://geo.btaa.org",
+                "Origin": "https://ogm.geo4lib.app",
                 "X-Visit-Token": "visit-123",
-                "X-BTAA-Client-Name": "geoportal-web",
-                "X-BTAA-Client-Version": "test-build",
-                "X-BTAA-Client-Channel": "browser",
+                "X-OGM-Client-Name": "geoportal-web",
+                "X-OGM-Client-Version": "test-build",
+                "X-OGM-Client-Channel": "browser",
             },
         )
 
@@ -65,7 +65,7 @@ async def test_analytics_events_endpoint_queues_normalized_batch(async_client):
     assert queued["searches"][0]["client_name"] == "geoportal-web"
     assert queued["searches"][0]["client_version"] == "test-build"
     assert queued["searches"][0]["client_channel"] == "browser"
-    assert queued["searches"][0]["source_host"] == "geo.btaa.org"
+    assert queued["searches"][0]["source_host"] == "ogm.geo4lib.app"
     assert queued["impressions"][0]["visit_token"] == "visit-123"
     assert queued["events"][0]["client_name"] == "geoportal-web"
 

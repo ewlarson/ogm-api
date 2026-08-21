@@ -10,7 +10,7 @@ downstream overlay.
 - `geobtaa/api` remains the source for shared backend bug fixes and enhancements.
 - `backend/` is the import boundary.
 - `config/ogm-owned-paths.txt` lists files this repo owns downstream.
-- `config/geobtaa-backend-source.env` records the canonical upstream branch and
+- `config/upstream-backend-source.env` records the canonical upstream branch and
   the last applied import metadata.
 
 Do not routinely merge the full `geobtaa/api` repository into this repo. The
@@ -78,7 +78,7 @@ git switch -c feature/sync-geobtaa-api-YYYY-MM-DD
 ./scripts/sync_backend_from_data_api.sh --apply
 git diff --stat
 make test
-git add backend config/geobtaa-backend-source.env
+git add backend config/upstream-backend-source.env
 git commit -m "Import geobtaa/api backend <sha>"
 ```
 

@@ -249,7 +249,7 @@ def test_unr_level_zero_info_worker_fetches_and_caches_real_rendition():
         mock_get.assert_called_once_with(
             UNR_IMAGE_URL,
             timeout=30,
-            headers={"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"},
+            headers={"User-Agent": "OpenGeoMetadata-API/1.0 (https://opengeometadata.org/)"},
             allow_redirects=False,
             stream=True,
         )

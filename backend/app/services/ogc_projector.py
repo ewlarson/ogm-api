@@ -39,7 +39,7 @@ class OGCResponseProjector:
 
     @staticmethod
     def build_item(
-        request_url: str, resource: Dict[str, Any], collection_id: str = "btaa-records"
+        request_url: str, resource: Dict[str, Any], collection_id: str = "ogm-records"
     ) -> Dict[str, Any]:
         """Builds a GeoJSON Feature representing a single record item."""
 
@@ -115,7 +115,7 @@ class OGCResponseProjector:
     def build_collections(request_url: str) -> Dict[str, Any]:
         """Builds the collections response."""
         base_url = request_url.split("/collections")[0]
-        collection = OGCResponseProjector.build_collection(request_url, "btaa-records")
+        collection = OGCResponseProjector.build_collection(request_url, "ogm-records")
 
         return {
             "collections": [collection],
@@ -173,7 +173,7 @@ class OGCResponseProjector:
         search_results: Dict[str, Any],
         page: int,
         limit: int,
-        collection_id: str = "btaa-records",
+        collection_id: str = "ogm-records",
     ) -> Dict[str, Any]:
         """Builds an Item Collection (Feature Collection) response from search results."""
         features = []

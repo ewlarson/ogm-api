@@ -21,8 +21,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-DEFAULT_DATABASE_NAME = "btaa_geospatial_api"
-DEFAULT_PREFIX = "btaa-geospatial-api"
+DEFAULT_DATABASE_NAME = "opengeometadata_api"
+DEFAULT_PREFIX = "opengeometadata-api"
 DEFAULT_REQUIRED_DEST = "prd"
 DEFAULT_RETENTION_COUNT = 3
 
@@ -173,7 +173,7 @@ def _build_config() -> BackupConfig:
         prefix=prefix,
         retention_count=retention_count,
         database_url=_normalize_database_url(database_url),
-        work_dir=Path(os.getenv("BACKUP_WORK_DIR", "/tmp/btaa-geospatial-api-backups")),
+        work_dir=Path(os.getenv("BACKUP_WORK_DIR", "/tmp/opengeometadata-api-backups")),
         sse=os.getenv("BACKUP_S3_SSE") or None,
         sse_kms_key_id=os.getenv("BACKUP_S3_SSE_KMS_KEY_ID") or None,
         storage_class=os.getenv("BACKUP_S3_STORAGE_CLASS") or None,

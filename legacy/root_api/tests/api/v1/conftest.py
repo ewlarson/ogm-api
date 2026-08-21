@@ -11,7 +11,7 @@ load_dotenv(".env.test")
 
 # Override DATABASE_URL to use async driver
 os.environ["DATABASE_URL"] = (
-    "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_ogm_api_test"
+    "postgresql+asyncpg://postgres:postgres@localhost:2345/ogm_ogm_api_test"
 )
 
 # Override ELASTICSEARCH_URL to use localhost instead of Docker hostname
@@ -21,7 +21,7 @@ from app.main import app
 from db.database import database
 
 # Override the index after app import to ensure it takes effect
-os.environ["ELASTICSEARCH_INDEX"] = "btaa_ogm_api"
+os.environ["ELASTICSEARCH_INDEX"] = "ogm_ogm_api"
 
 
 @pytest.fixture

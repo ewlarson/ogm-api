@@ -37,7 +37,7 @@ def create_api_rate_limiting_tables():
     """Create the API rate limiting tables."""
     try:
         # Get database URL from environment and ensure it's synchronous
-        database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api_test")
+        database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api_test")
         
         # Convert asyncpg URL to sync URL
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
@@ -46,13 +46,13 @@ def create_api_rate_limiting_tables():
         # If running locally (not in Docker) and DATABASE_URL points to a Docker service, convert to localhost:2345
         parsed = urlparse(sync_database_url)
         is_docker = os.getenv("IS_DOCKER", "false").lower() == "true"
-        if not is_docker and parsed.hostname and ("paradedb" in parsed.hostname or "btaa-geospatial-api" in parsed.hostname):
+        if not is_docker and parsed.hostname and "paradedb" in parsed.hostname:
             # Replace Docker hostname with localhost and use port 2345 for local development
             # Use local database credentials from environment or defaults
             local_port = os.getenv("DB_PORT", "2345")
             local_user = os.getenv("DB_USER", "postgres")
             local_password = os.getenv("DB_PASSWORD", "postgres")
-            local_db = os.getenv("DB_NAME", parsed.path.lstrip("/") if parsed.path else "btaa_geospatial_api")
+            local_db = os.getenv("DB_NAME", parsed.path.lstrip("/") if parsed.path else "opengeometadata_api")
             
             # Build new netloc with local credentials
             new_netloc = f"{local_user}:{local_password}@localhost:{local_port}"

@@ -11,7 +11,7 @@ Usage:
     python app/gazetteer/download.py [options]
 
 Arguments:
-    --gazetteer     Gazetteer to download (wof, btaa, geonames). Can be specified multiple times.
+    --gazetteer     Gazetteer to download (wof, ogm, geonames). Can be specified multiple times.
     --download      Download and extract data.
     --export        Export data to CSV (for gazetteers that need this step).
     --all           Run all operations for the specified gazetteer(s).

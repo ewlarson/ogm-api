@@ -40,8 +40,8 @@ DOCUMENTATION_PATHS = {
 }
 DOCUMENTATION_ASSET_PATHS = {
     "/static/brand.css",
-    "/static/btaa-gin-white.png",
-    "/static/btaa-logo-white.png",
+    "/static/opengeometadata-bauhaus-logo.svg",
+    "/static/opengeometadata-map-legend-logo-composite.svg",
     "/static/favicon.ico",
 }
 
@@ -185,7 +185,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             tier_id = tier_info.get("tier_id")
 
             if tier_id is None:
-                if tier_info.get("source") == "env:BTAA_GEOSPATIAL_API_KEY":
+                if tier_info.get("source") == "env:OPENGEOMETADATA_API_KEY":
                     logger.debug(
                         "Skipping API usage logging for configured server API key on %s",
                         request.url.path,

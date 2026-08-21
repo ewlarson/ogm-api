@@ -65,7 +65,7 @@ async def validate_spatial_facets(sample_size: int = 100, verbose: bool = False)
             for resource in resources:
                 try:
                     # Get the resource from Elasticsearch
-                    es_response = await es.get(index="btaa_ogm_api", id=resource["id"])
+                    es_response = await es.get(index="opengeometadata_api", id=resource["id"])
 
                     es_doc = es_response["_source"]
 

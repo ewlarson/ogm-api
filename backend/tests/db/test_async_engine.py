@@ -19,7 +19,7 @@ async def test_create_app_async_engine_forces_nullpool_in_tests(monkeypatch):
     monkeypatch.setenv("SQLALCHEMY_ASYNC_USE_NULLPOOL", "false")
 
     engine = create_app_async_engine(
-        "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_geospatial_api_test"
+        "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api_test"
     )
 
     try:
@@ -33,7 +33,7 @@ def test_create_app_sync_engine_forces_nullpool_in_tests(monkeypatch):
     monkeypatch.setenv("SQLALCHEMY_SYNC_USE_NULLPOOL", "false")
 
     engine = create_app_sync_engine(
-        "postgresql://postgres:postgres@localhost:2345/btaa_geospatial_api_test"
+        "postgresql://postgres:postgres@localhost:2345/opengeometadata_api_test"
     )
 
     try:
@@ -51,7 +51,7 @@ def test_create_app_sync_engine_uses_env_pool_bounds(monkeypatch):
     monkeypatch.setenv("SQLALCHEMY_SYNC_POOL_TIMEOUT", "3")
 
     engine = create_app_sync_engine(
-        "postgresql://postgres:postgres@localhost:2345/btaa_geospatial_api_test"
+        "postgresql://postgres:postgres@localhost:2345/opengeometadata_api_test"
     )
 
     try:
@@ -72,7 +72,7 @@ async def test_create_app_async_engine_uses_env_pool_bounds(monkeypatch):
     monkeypatch.setenv("SQLALCHEMY_ASYNC_POOL_TIMEOUT", "3")
 
     engine = create_app_async_engine(
-        "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_geospatial_api_test"
+        "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api_test"
     )
 
     try:

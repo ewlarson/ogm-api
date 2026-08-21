@@ -25,7 +25,7 @@ from app.elasticsearch.client import es  # noqa: E402 (load_dotenv must run firs
 
 
 async def main() -> None:
-    index = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+    index = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
 
     # 1. Sample docs: fetch a few with H3 + geo fields
     sample = await es.search(

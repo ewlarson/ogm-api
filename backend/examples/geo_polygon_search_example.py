@@ -2,7 +2,7 @@ import requests
 import json
 from IPython.display import HTML, display
 
-url = 'https://lib-btaageoapi-dev-app-01.oit.umn.edu/api/v1/search'
+url = 'https://ogm.geo4lib.app/api/v1/search'
 headers = {'accept': 'application/json'}
 
 # ============================================================================

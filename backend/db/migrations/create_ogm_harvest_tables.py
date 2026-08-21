@@ -21,7 +21,7 @@ def create_ogm_harvest_tables():
         # Get database URL from environment and ensure it's synchronous
         database_url = os.getenv(
             "DATABASE_URL",
-            "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api_test",
+            "postgresql://postgres:postgres@localhost:2345/opengeometadata_api_test",
         )
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
 

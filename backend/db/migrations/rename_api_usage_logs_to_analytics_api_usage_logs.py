@@ -108,20 +108,20 @@ def _set_table_id_sequence(conn, table_name: str) -> None:
 def _get_sync_database_url() -> str:
     database_url = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:2345/btaa_geospatial_api",
+        "postgresql://postgres:postgres@localhost:2345/opengeometadata_api",
     )
     sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
 
     parsed = urlparse(sync_database_url)
     is_docker = os.getenv("IS_DOCKER", "false").lower() == "true"
     if not is_docker and parsed.hostname and (
-        "paradedb" in parsed.hostname or "btaa-geospatial-api" in parsed.hostname
+        "paradedb" in parsed.hostname
     ):
         local_port = os.getenv("DB_PORT", "2345")
         local_user = os.getenv("DB_USER", "postgres")
         local_password = os.getenv("DB_PASSWORD", "postgres")
         local_db = os.getenv(
-            "DB_NAME", parsed.path.lstrip("/") if parsed.path else "btaa_geospatial_api"
+            "DB_NAME", parsed.path.lstrip("/") if parsed.path else "opengeometadata_api"
         )
         new_netloc = f"{local_user}:{local_password}@localhost:{local_port}"
         sync_database_url = urlunparse(parsed._replace(netloc=new_netloc, path=f"/{local_db}"))

@@ -54,12 +54,12 @@ class TestImportAllModuleStructure:
     def test_importer_imports(self):
         """Test that importer classes can be imported."""
         try:
-            from app.gazetteer.importers.btaa_importer import BtaaImporter
             from app.gazetteer.importers.fast_importer import FastImporter
             from app.gazetteer.importers.geonames_importer import GeonamesImporter
+            from app.gazetteer.importers.ogm_importer import OgmImporter
             from app.gazetteer.importers.wof_importer import WofImporter
 
-            assert callable(BtaaImporter)
+            assert callable(OgmImporter)
             assert callable(FastImporter)
             assert callable(GeonamesImporter)
             assert callable(WofImporter)

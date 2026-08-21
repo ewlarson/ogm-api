@@ -69,7 +69,7 @@ def display_table(headers, rows):
 
 # Configure base URL - change this to your local server if running locally
 # Local: 'http://localhost:8000/api/v1'
-# Dev: 'https://lib-btaageoapi-dev-app-01.oit.umn.edu/api/v1'
+# Dev: 'https://ogm.geo4lib.app/api/v1'
 base_url = 'http://localhost:8000/api/v1'  # Change this to match your setup
 headers = {'accept': 'application/json'}
 

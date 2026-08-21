@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download BTAA fixture files that have "b1g" in their URLs.
+Download OGM fixture files that have "b1g" in their URLs.
 Appends /raw to each link and downloads the files.
 """
 
@@ -96,8 +96,8 @@ def download_file(url, output_dir, index):
 def main():
     # Get the directory where this script is located
     script_dir = Path(__file__).parent
-    csv_file = script_dir / "btaa_fixtures_list.csv"
-    output_dir = script_dir / "btaa_fixtures_data"
+    csv_file = script_dir / "ogm_fixtures_list.csv"
+    output_dir = script_dir / "ogm_fixtures_data"
     
     # Create output directory
     output_dir.mkdir(exist_ok=True)

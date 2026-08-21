@@ -145,7 +145,7 @@ class ResourcePresenter:
             "attributes": nested_attributes if nested_attributes else {},
             "meta": {
                 "@context": "https://gin.btaa.org/ld/contexts/ogm-aardvark-btaa.context.jsonld",
-                "@type": "BtaaAardvarkRecord",
+                "@type": "OgmAardvarkRecord",
                 "ui": restructured_ui,
             },
         }

@@ -22,10 +22,10 @@ def test_analytics_events_accepts_cli_command_payload(monkeypatch):
     response = client.post(
         "/api/v1/analytics/events",
         headers={
-            "X-BTAA-Client-Name": "btaa-geo-api-cli",
-            "X-BTAA-Client-Version": "0.1.0",
-            "X-BTAA-Client-Channel": "cli",
-            "X-BTAA-Client-Instance": "instance-1",
+            "X-OGM-Client-Name": "ogm-api-cli",
+            "X-OGM-Client-Version": "0.1.0",
+            "X-OGM-Client-Channel": "cli",
+            "X-OGM-Client-Instance": "instance-1",
         },
         json={
             "events": [
@@ -50,5 +50,5 @@ def test_analytics_events_accepts_cli_command_payload(monkeypatch):
     event = captured["payload"]["events"][0]
     search = captured["payload"]["searches"][0]
     assert event["event_type"] == "cli.command.search"
-    assert event["client_name"] == "btaa-geo-api-cli"
+    assert event["client_name"] == "ogm-api-cli"
     assert search["client_channel"] == "cli"

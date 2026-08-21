@@ -52,10 +52,10 @@ def parse_slack_command(text: str | None) -> SlackCommand:
     """Parse a compact slash command grammar.
 
     Supported examples:
-    - /btaa
-    - /btaa help
-    - /btaa search lakes
-    - /btaa lakes
+    - /ogm
+    - /ogm help
+    - /ogm search lakes
+    - /ogm lakes
     """
     cleaned = (text or "").strip()
     if not cleaned:
@@ -84,13 +84,13 @@ async def handle_slack_command(form_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def help_response() -> dict[str, Any]:
-    command = os.getenv("SLACK_BOT_COMMAND", "/btaa")
+    command = os.getenv("SLACK_BOT_COMMAND", "/ogm")
     text = f"Try `{command} search minnesota lakes`, `{command} sanborn maps`, or `{command} help`."
     return {
         "response_type": "ephemeral",
         "text": text,
         "blocks": [
-            {"type": "section", "text": {"type": "mrkdwn", "text": "*BTAA Geoportal*"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": "*OpenGeoMetadata API*"}},
             {"type": "section", "text": {"type": "mrkdwn", "text": text}},
         ],
     }
@@ -116,13 +116,13 @@ async def search_response(query: str | None) -> dict[str, Any]:
     if not items:
         return {
             "response_type": "ephemeral",
-            "text": f"No BTAA Geoportal results found for `{query}`.",
+            "text": f"No OpenGeoMetadata API results found for `{query}`.",
             "blocks": [
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"No BTAA Geoportal results found for `{query}`.",
+                        "text": f"No OpenGeoMetadata API results found for `{query}`.",
                     },
                 }
             ],
@@ -133,7 +133,7 @@ async def search_response(query: str | None) -> dict[str, Any]:
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*BTAA Geoportal results for `{query}`* ({total:,} found)",
+                "text": f"*OpenGeoMetadata API results for `{query}`* ({total:,} found)",
             },
         }
     ]
@@ -154,7 +154,7 @@ async def search_response(query: str | None) -> dict[str, Any]:
 
     return {
         "response_type": "ephemeral",
-        "text": f"BTAA Geoportal results for {query}",
+        "text": f"OpenGeoMetadata API results for {query}",
         "blocks": blocks,
     }
 
@@ -261,8 +261,8 @@ def _base_url() -> str:
     base = (
         os.getenv("GEOPORTAL_BASE_URL")
         or os.getenv("APPLICATION_URL")
-        or os.getenv("BTAA_GEOSPATIAL_API_BASE_URL")
-        or "https://geoportal.btaa.org"
+        or os.getenv("OPENGEOMETADATA_API_BASE_URL")
+        or "https://ogm.geo4lib.app"
     )
     base = base.rstrip("/")
     if base.endswith("/api/v1"):

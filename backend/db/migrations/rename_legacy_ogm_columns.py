@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rename BTAA-specific columns to restore original casing."""
+"""Rename OGM-specific columns to restore original casing."""
 
 import logging
 import os
@@ -33,10 +33,10 @@ def _normalize_database_url(url: str) -> str:
     return url
 
 
-def rename_btaa_columns():
-    """Rename BTAA columns in the resources table back to camelCase."""
+def rename_legacy_ogm_columns():
+    """Rename OGM columns in the resources table back to camelCase."""
     database_url = os.getenv(
-        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api"
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api"
     )
     engine = create_engine(_normalize_database_url(database_url))
 
@@ -82,8 +82,8 @@ def rename_btaa_columns():
             )
             conn.commit()
 
-    logger.info("Completed BTAA column casing fixes.")
+    logger.info("Completed OGM column casing fixes.")
 
 
 if __name__ == "__main__":
-    rename_btaa_columns()
+    rename_legacy_ogm_columns()

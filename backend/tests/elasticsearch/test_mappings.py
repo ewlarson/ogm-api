@@ -77,12 +77,12 @@ class TestMappings:
         assert "geo_county" in properties
         assert properties["geo_county"]["type"] == "keyword"
 
-    def test_btaa_specific_field_mappings(self):
-        """Test that BTAA-specific field mappings are present."""
+    def test_ogm_specific_field_mappings(self):
+        """Test that OGM-specific field mappings are present."""
         properties = INDEX_MAPPING["mappings"]["properties"]
 
-        # Test BTAA fields
-        btaa_fields = [
+        # Test OGM fields
+        ogm_fields = [
             "b1g_code_s",
             "b1g_status_s",
             "b1g_dct_accrualMethod_s",
@@ -105,8 +105,8 @@ class TestMappings:
             "b1g_adminTags_sm",
         ]
 
-        for field in btaa_fields:
-            assert field in properties, f"BTAA field {field} should be in mappings"
+        for field in ogm_fields:
+            assert field in properties, f"OGM field {field} should be in mappings"
 
     def test_suggest_field_mapping(self):
         """Test that the suggest field is correctly configured for autocomplete."""

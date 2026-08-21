@@ -29,7 +29,7 @@ load_dotenv()
 
 # Use ELASTICSEARCH_URL from environment or default
 ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
-INDEX_NAME = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+INDEX_NAME = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

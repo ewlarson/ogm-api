@@ -24,7 +24,7 @@ def update_ogm_field_names():
     
     # Get database URL from environment
     database_url = os.getenv(
-        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api"
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api"
     )
     
     # Convert async URL to sync URL
@@ -46,7 +46,7 @@ def update_ogm_field_names():
         "gbl_wxsidentifier_s": "gbl_wxsIdentifier_s",
         "gbl_displaynote_sm": "gbl_displayNote_sm",
         
-        # BTAA-specific fields
+        # OGM-specific fields
         "b1g_dct_accrualmethod_s": "b1g_dct_accrualMethod_s",
         "b1g_dct_accrualperiodicity_s": "b1g_dct_accrualPeriodicity_s",
         "b1g_dateaccessioned_s": "b1g_dateAccessioned_s",
@@ -122,7 +122,7 @@ def verify_schema_update():
     
     # Get database URL from environment
     database_url = os.getenv(
-        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api"
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api"
     )
     
     # Convert async URL to sync URL

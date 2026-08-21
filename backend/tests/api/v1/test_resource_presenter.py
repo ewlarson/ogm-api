@@ -152,7 +152,7 @@ async def test_resource_presenter_full_profile_contract_snapshot():
         },
         "meta": {
             "@context": "https://gin.btaa.org/ld/contexts/ogm-aardvark-btaa.context.jsonld",
-            "@type": "BtaaAardvarkRecord",
+            "@type": "OgmAardvarkRecord",
             "ui": {
                 "thumbnail_url": immutable_thumbnail_url,
                 "citation": "APA",
@@ -245,7 +245,7 @@ async def test_resource_presenter_search_profile_contract_snapshot():
         },
         "meta": {
             "@context": "https://gin.btaa.org/ld/contexts/ogm-aardvark-btaa.context.jsonld",
-            "@type": "BtaaAardvarkRecord",
+            "@type": "OgmAardvarkRecord",
             "ui": {
                 "thumbnail_url": "https://images.example.edu/res-1-thumb.jpg",
                 "citation": "APA",
@@ -303,7 +303,7 @@ async def test_resource_presenter_homepage_profile_contract_snapshot():
         },
         "meta": {
             "@context": "https://gin.btaa.org/ld/contexts/ogm-aardvark-btaa.context.jsonld",
-            "@type": "BtaaAardvarkRecord",
+            "@type": "OgmAardvarkRecord",
             "ui": {
                 "thumbnail_url": "https://images.example.edu/res-1-thumb.jpg",
                 "viewer": {

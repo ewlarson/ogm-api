@@ -14,7 +14,10 @@ from db.session import async_session
 
 logger = logging.getLogger(__name__)
 API_KEY_HASH_ITERATIONS = 600_000
-DEFAULT_API_KEY_HASH_SECRET = "btaa-api-key-hash-v2"
+DEFAULT_API_KEY_HASH_SECRET = "ogm-api-key-hash-v3"
+# Keep this exact historical salt until every stored fallback hash has been
+# upgraded during successful authentication.
+LEGACY_DEFAULT_API_KEY_HASH_SECRET = "btaa-api-key-hash-v2"
 API_KEY_TIER_CACHE_TTL_SECONDS = float(os.getenv("API_KEY_TIER_CACHE_TTL_SECONDS", "60"))
 API_KEY_LAST_USED_UPDATE_INTERVAL_SECONDS = float(
     os.getenv("API_KEY_LAST_USED_UPDATE_INTERVAL_SECONDS", "60")
@@ -49,13 +52,13 @@ class APIKeyService:
     def _configured_server_api_keys() -> List[str]:
         """Return server-injected API keys configured through the environment.
 
-        `BTAA_GEOSPATIAL_API_KEY` is injected into React Router SSR and nginx BFF
+        `OPENGEOMETADATA_API_KEY` is injected into React Router SSR and nginx BFF
         requests. It must remain unlimited even if a destination-local API key
         table is stale after a DB sync or secret rotation.
         """
         raw_values = [
-            os.getenv("BTAA_GEOSPATIAL_API_KEY", ""),
-            os.getenv("BTAA_GEOSPATIAL_API_KEYS", ""),
+            os.getenv("OPENGEOMETADATA_API_KEY", ""),
+            os.getenv("OPENGEOMETADATA_API_KEYS", ""),
         ]
 
         keys: List[str] = []
@@ -73,13 +76,13 @@ class APIKeyService:
             if hmac.compare_digest(key, configured_key):
                 return {
                     "tier_id": None,
-                    "tier_name": "btaa_primary",
-                    "display_name": "BTAA Geoportal Frontend",
+                    "tier_name": "ogm_primary",
+                    "display_name": "OpenGeoMetadata API Frontend",
                     "requests_per_minute": None,
                     "api_key_id": None,
                     "key_hash": APIKeyService.legacy_hash_api_key(key),
                     "allowed_ips": None,
-                    "source": "env:BTAA_GEOSPATIAL_API_KEY",
+                    "source": "env:OPENGEOMETADATA_API_KEY",
                 }
         return None
 
@@ -171,18 +174,28 @@ class APIKeyService:
     @staticmethod
     def hash_api_key(key: str) -> str:
         """Hash an API key using PBKDF2-HMAC-SHA256."""
-        salt = (
+        secret = (
             os.getenv("API_KEY_HASH_SECRET")
             or os.getenv("SECRET_KEY")
             or DEFAULT_API_KEY_HASH_SECRET
-        ).encode("utf-8")
+        )
+        return APIKeyService._pbkdf2_hash_api_key(key, secret)
+
+    @staticmethod
+    def _pbkdf2_hash_api_key(key: str, secret: str) -> str:
+        """Hash an API key with an explicit PBKDF2 salt."""
         return hashlib.pbkdf2_hmac(
             "sha256",
             key.encode("utf-8"),
-            salt,
+            secret.encode("utf-8"),
             API_KEY_HASH_ITERATIONS,
             dklen=32,
         ).hex()
+
+    @staticmethod
+    def legacy_default_hash_api_key(key: str) -> str:
+        """Hash with the pre-OGM fallback salt for an in-place compatibility upgrade."""
+        return APIKeyService._pbkdf2_hash_api_key(key, LEGACY_DEFAULT_API_KEY_HASH_SECRET)
 
     @staticmethod
     def legacy_hash_api_key(key: str) -> str:
@@ -212,10 +225,9 @@ class APIKeyService:
             return cached_tier
 
         key_hash = self.hash_api_key(key)
+        legacy_default_key_hash = self.legacy_default_hash_api_key(key)
         legacy_key_hash = self.legacy_hash_api_key(key)
-        candidate_hashes = [key_hash]
-        if legacy_key_hash != key_hash:
-            candidate_hashes.append(legacy_key_hash)
+        candidate_hashes = list(dict.fromkeys([key_hash, legacy_default_key_hash, legacy_key_hash]))
 
         async with async_session() as session:
             try:
@@ -251,7 +263,7 @@ class APIKeyService:
                 }
 
                 update_values = {"last_used_at": datetime.utcnow()}
-                if stored_key_hash == legacy_key_hash and stored_key_hash != key_hash:
+                if stored_key_hash != key_hash:
                     update_values["key_hash"] = key_hash
                 elif not self._last_used_update_due(api_key_id):
                     update_values = {}

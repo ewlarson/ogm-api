@@ -3,7 +3,7 @@
 Test script for gazetteer API endpoints.
 
 This script provides a comprehensive test suite for the gazetteer API endpoints.
-It tests multiple gazetteer sources (GeoNames, Who's on First, BTAA) and provides
+It tests multiple gazetteer sources (GeoNames, Who's on First, OGM) and provides
 detailed output of the test results. The script can be configured to test different
 environments by specifying a custom base URL.
 
@@ -36,7 +36,7 @@ def test_endpoints(base_url="http://localhost:8000/api/v1"):
     2. Search GeoNames
     3. Search Who's on First
     4. Get WOF details
-    5. Search BTAA
+    5. Search OGM
     6. Search all gazetteers
 
     Args:
@@ -113,10 +113,10 @@ def test_endpoints(base_url="http://localhost:8000/api/v1"):
     else:
         print("Skipping test 4 as no WOF results were returned in test 3")
 
-    # Test 5: Search BTAA
-    print("\nTest 5: Search BTAA")
+    # Test 5: Search OGM
+    print("\nTest 5: Search OGM")
     print("-" * 80)
-    response = requests.get(f"{base_url}/gazetteers/btaa", params={"q": "minnesota", "limit": 5})
+    response = requests.get(f"{base_url}/gazetteers/ogm", params={"q": "minnesota", "limit": 5})
     if response.status_code == 200:
         data = response.json()
         results = data.get("data", [])

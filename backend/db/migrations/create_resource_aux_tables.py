@@ -30,7 +30,7 @@ def create_resource_aux_tables() -> None:
     try:
         database_url = os.getenv(
             "DATABASE_URL",
-            "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api_test",
+            "postgresql://postgres:postgres@localhost:2345/opengeometadata_api_test",
         )
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
 

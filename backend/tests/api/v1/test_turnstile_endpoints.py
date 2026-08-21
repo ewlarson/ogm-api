@@ -55,7 +55,7 @@ def test_turnstile_verify_returns_session(monkeypatch):
     attributes = response.json()["data"]["attributes"]
     assert attributes["verified"] is True
     assert attributes["session_token"] == "session-token"
-    assert "btaa_turnstile_session=session-token" in response.headers["set-cookie"]
+    assert "ogm_turnstile_session=session-token" in response.headers["set-cookie"]
 
 
 def test_turnstile_verify_rejects_failed_validation(monkeypatch):

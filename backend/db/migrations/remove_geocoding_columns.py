@@ -33,7 +33,7 @@ logging.basicConfig(
 def get_db_connection():
     """Get database connection, handling Docker hostnames for local development."""
     database_url = os.getenv(
-        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_geospatial_api"
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api"
     )
 
     # Convert asyncpg URL to sync URL
@@ -44,7 +44,7 @@ def get_db_connection():
 
     # Check if hostname is a Docker service (needs conversion to localhost)
     is_docker_hostname = parsed.hostname and (
-        "paradedb" in parsed.hostname or "btaa-geospatial-api" in parsed.hostname
+        "paradedb" in parsed.hostname
     )
 
     # Determine connection parameters
@@ -55,7 +55,7 @@ def get_db_connection():
         local_user = os.getenv("DB_USER", parsed.username or "postgres")
         local_password = os.getenv("DB_PASSWORD", parsed.password or "postgres")
         local_db = os.getenv(
-            "DB_NAME", parsed.path.lstrip("/") if parsed.path else "btaa_geospatial_api"
+            "DB_NAME", parsed.path.lstrip("/") if parsed.path else "opengeometadata_api"
         )
         local_host = "localhost" if is_docker_hostname else (parsed.hostname or "localhost")
 
@@ -80,7 +80,7 @@ def get_db_connection():
     return psycopg2.connect(
         host=parsed.hostname or "localhost",
         port=parsed.port or 5432,
-        database=parsed.path.lstrip("/") if parsed.path else "btaa_geospatial_api",
+        database=parsed.path.lstrip("/") if parsed.path else "opengeometadata_api",
         user=parsed.username or "postgres",
         password=parsed.password or "postgres",
     )

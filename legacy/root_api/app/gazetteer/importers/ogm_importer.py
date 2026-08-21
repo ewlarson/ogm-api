@@ -4,22 +4,22 @@ import os
 from datetime import datetime
 from typing import Any, Dict
 
-from db.models import gazetteer_btaa
+from db.models import gazetteer_ogm
 
 from .base_importer import BaseImporter
 
 logger = logging.getLogger(__name__)
 
 
-class BtaaImporter(BaseImporter):
-    """Importer for BTAA gazetteer data."""
+class OgmImporter(BaseImporter):
+    """Importer for OGM gazetteer data."""
 
-    # BTAA-specific data directory
+    # OGM-specific data directory
     DATA_DIR = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
         "data",
         "gazetteers",
-        "btaa",
+        "ogm",
     )
 
     # Map CSV column names to database field names
@@ -36,19 +36,19 @@ class BtaaImporter(BaseImporter):
     }
 
     # Smaller chunk size to avoid PostgreSQL parameter limits (similar to GeoNames)
-    # The BTAA table has 9 fields + 2 for created_at/updated_at, so 11 params per record
+    # The OGM table has 9 fields + 2 for created_at/updated_at, so 11 params per record
     # 32767 / 11 ≈ 2979, using 2000 to be safe
     CHUNK_SIZE = 2000
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.data_directory = kwargs.get("data_directory") or self.DATA_DIR
-        self.table = gazetteer_btaa
-        self.table_name = "gazetteer_btaa"
+        self.table = gazetteer_ogm
+        self.table_name = "gazetteer_ogm"
 
     def clean_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Clean and transform a BTAA record before insertion.
+        Clean and transform an OGM record before insertion.
 
         Args:
             record: The raw record from the CSV.
@@ -73,7 +73,7 @@ class BtaaImporter(BaseImporter):
 
     async def import_data(self) -> Dict[str, Any]:
         """
-        Import BTAA data from CSV files to the database.
+        Import OGM data from CSV files to the database.
 
         Returns:
             Dictionary with import statistics.
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     async def run_import():
-        importer = BtaaImporter()
+        importer = OgmImporter()
         result = await importer.import_data()
         print(result)
 

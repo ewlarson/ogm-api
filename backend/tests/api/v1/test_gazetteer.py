@@ -181,12 +181,12 @@ class TestWOFGazetteer:
             assert data.endswith(")")
 
 
-class TestBTAAGazetteer:
-    """Test cases for BTAA gazetteer endpoints."""
+class TestOGMGazetteer:
+    """Test cases for OGM gazetteer endpoints."""
 
-    def test_list_btaa_success(self):
-        """Test successful listing of BTAA records."""
-        response = client.get("/gazetteers/gazetteers/btaa")
+    def test_list_ogm_success(self):
+        """Test successful listing of OGM records."""
+        response = client.get("/gazetteers/gazetteers/ogm")
 
         assert response.status_code in [200, 500]
         data = response.json()
@@ -198,9 +198,9 @@ class TestBTAAGazetteer:
         else:
             assert "detail" in data
 
-    def test_list_btaa_with_pagination(self):
-        """Test BTAA listing with pagination."""
-        response = client.get("/gazetteers/gazetteers/btaa?page=1&per_page=10")
+    def test_list_ogm_with_pagination(self):
+        """Test OGM listing with pagination."""
+        response = client.get("/gazetteers/gazetteers/ogm?page=1&per_page=10")
 
         assert response.status_code in [200, 500]
         data = response.json()
@@ -209,9 +209,9 @@ class TestBTAAGazetteer:
             assert "data" in data
             assert "meta" in data
 
-    def test_list_btaa_with_search(self):
-        """Test BTAA listing with search query."""
-        response = client.get("/gazetteers/gazetteers/btaa?q=minnesota")
+    def test_list_ogm_with_search(self):
+        """Test OGM listing with search query."""
+        response = client.get("/gazetteers/gazetteers/ogm?q=minnesota")
 
         assert response.status_code in [200, 500]
         data = response.json()
@@ -220,9 +220,9 @@ class TestBTAAGazetteer:
             assert "data" in data
             assert "meta" in data
 
-    def test_list_btaa_with_callback(self):
-        """Test BTAA listing with JSONP callback."""
-        response = client.get("/gazetteers/gazetteers/btaa?callback=myCallback")
+    def test_list_ogm_with_callback(self):
+        """Test OGM listing with JSONP callback."""
+        response = client.get("/gazetteers/gazetteers/ogm?callback=myCallback")
 
         assert response.status_code in [200, 500]
         data = response.json()
@@ -388,9 +388,9 @@ class TestGazetteerResponseFormat:
             assert "attributes" in first_item
             assert first_item["type"] == "wof"
 
-    def test_btaa_response_content(self):
-        """Test BTAA response content structure."""
-        response = client.get("/gazetteers/gazetteers/btaa")
+    def test_ogm_response_content(self):
+        """Test OGM response content structure."""
+        response = client.get("/gazetteers/gazetteers/ogm")
 
         assert response.status_code in [200, 500]
         data = response.json()
@@ -401,7 +401,7 @@ class TestGazetteerResponseFormat:
             assert "id" in first_item
             assert "type" in first_item
             assert "attributes" in first_item
-            assert first_item["type"] == "btaa"
+            assert first_item["type"] == "ogm"
 
 
 class TestGazetteerErrorHandling:

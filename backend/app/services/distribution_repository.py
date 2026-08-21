@@ -45,7 +45,7 @@ async def fetch_resource_distributions(
     Fetch all distribution rows for a single resource.
 
     Args:
-        resource_id: The BTAA resource identifier.
+        resource_id: The OGM resource identifier.
         session: Optional AsyncSession to reuse an existing transaction context.
 
     Returns:

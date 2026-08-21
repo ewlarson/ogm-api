@@ -42,7 +42,7 @@ class TestGazetteerProductionDatabase:
             data = response.json()
             assert "geonames" in data
             assert "wof" in data
-            assert "btaa" in data
+            assert "ogm" in data
 
     def test_search_geonames_with_real_database(self):
         """Test search GeoNames with real database connection."""
@@ -70,9 +70,9 @@ class TestGazetteerProductionDatabase:
             assert "jsonapi" in data
             assert "links" in data
 
-    def test_search_btaa_with_real_database(self):
-        """Test search BTAA with real database connection."""
-        response = client.get("/gazetteers/btaa/search?q=test")
+    def test_search_ogm_with_real_database(self):
+        """Test search OGM with real database connection."""
+        response = client.get("/gazetteers/ogm/search?q=test")
 
         # Should return either success or database error
         assert response.status_code in [200, 500]
@@ -97,9 +97,9 @@ class TestGazetteerProductionDatabase:
         # Should return either success or database error
         assert response.status_code in [200, 500]
 
-    def test_search_specific_gazetteer_btaa(self):
-        """Test search with specific gazetteer=btaa."""
-        response = client.get("/gazetteers/search?q=test&gazetteer=btaa")
+    def test_search_specific_gazetteer_ogm(self):
+        """Test search with specific gazetteer=ogm."""
+        response = client.get("/gazetteers/search?q=test&gazetteer=ogm")
 
         # Should return either success or database error
         assert response.status_code in [200, 500]
@@ -166,9 +166,9 @@ class TestGazetteerProductionDatabase:
         response = client.get("/gazetteers/wof/search?q=test&limit=5&offset=0")
         assert response.status_code in [200, 500]
 
-    def test_search_btaa_with_pagination(self):
-        """Test BTAA search with pagination."""
-        response = client.get("/gazetteers/btaa/search?q=test&limit=5&offset=0")
+    def test_search_ogm_with_pagination(self):
+        """Test OGM search with pagination."""
+        response = client.get("/gazetteers/ogm/search?q=test&limit=5&offset=0")
         assert response.status_code in [200, 500]
 
     def test_search_geonames_with_jsonp(self):
@@ -181,9 +181,9 @@ class TestGazetteerProductionDatabase:
         response = client.get("/gazetteers/wof/search?q=test&callback=testCallback")
         assert response.status_code in [200, 500]
 
-    def test_search_btaa_with_jsonp(self):
-        """Test BTAA search with JSONP callback."""
-        response = client.get("/gazetteers/btaa/search?q=test&callback=testCallback")
+    def test_search_ogm_with_jsonp(self):
+        """Test OGM search with JSONP callback."""
+        response = client.get("/gazetteers/ogm/search?q=test&callback=testCallback")
         assert response.status_code in [200, 500]
 
     def test_search_different_query_types(self):
@@ -243,7 +243,7 @@ class TestGazetteerProductionDatabase:
             "/gazetteers/search?q=test",
             "/gazetteers/geonames/search?q=test",
             "/gazetteers/wof/search?q=test",
-            "/gazetteers/btaa/search?q=test",
+            "/gazetteers/ogm/search?q=test",
         ]
 
         for endpoint in endpoints:
@@ -259,7 +259,7 @@ class TestGazetteerProductionDatabase:
             data = response.json()
 
             # Should have proper structure for each gazetteer
-            for gazetteer_name in ["geonames", "wof", "btaa"]:
+            for gazetteer_name in ["geonames", "wof", "ogm"]:
                 if gazetteer_name in data:
                     gazetteer_data = data[gazetteer_name]
                     assert isinstance(gazetteer_data, dict)
@@ -295,9 +295,9 @@ class TestGazetteerProductionDatabase:
             assert "data" in data
             assert "links" in data
 
-    def test_search_btaa_response_structure(self):
-        """Test BTAA search response structure."""
-        response = client.get("/gazetteers/btaa/search?q=test")
+    def test_search_ogm_response_structure(self):
+        """Test OGM search response structure."""
+        response = client.get("/gazetteers/ogm/search?q=test")
 
         if response.status_code == 200:
             data = response.json()
@@ -344,7 +344,7 @@ class TestGazetteerProductionDatabase:
             "/gazetteers/search?q=test",
             "/gazetteers/geonames/search?q=test",
             "/gazetteers/wof/search?q=test",
-            "/gazetteers/btaa/search?q=test",
+            "/gazetteers/ogm/search?q=test",
         ]
 
         for endpoint in async_endpoints:
@@ -363,7 +363,7 @@ class TestGazetteerProductionDatabase:
             data = response.json()
             assert "geonames" in data
             assert "wof" in data
-            assert "btaa" in data
+            assert "ogm" in data
 
     def test_search_service_integration(self):
         """Test integration with real database services."""
@@ -382,4 +382,4 @@ class TestGazetteerProductionDatabase:
             # Should have processed the database results properly
             assert "geonames" in data
             assert "wof" in data
-            assert "btaa" in data
+            assert "ogm" in data

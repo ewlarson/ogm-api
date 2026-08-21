@@ -3,7 +3,7 @@
 Script to download and import gazetteer data.
 
 This script:
-1. Downloads data from all supported gazetteers (GeoNames, Who's on First, BTAA, FAST)
+1. Downloads data from all supported gazetteers (GeoNames, Who's on First, OGM, FAST)
 2. Imports the downloaded data into the database
 3. Provides detailed logging of the process
 
@@ -74,8 +74,8 @@ def check_gazetteer_data_exists(gazetteer: str) -> bool:
     elif gazetteer == "fast":
         # Check for MARCXML file
         return (data_dir / "fast" / "FASTGeographic.marcxml").exists()
-    elif gazetteer == "btaa":
-        # BTAA data is not downloaded, it's created from other sources
+    elif gazetteer == "ogm":
+        # OGM data is not downloaded, it's created from other sources
         return True
 
     return False
@@ -90,7 +90,7 @@ async def run_gazetteers():
         # Step 1: Download gazetteer data
         logger.info("Step 1: Downloading gazetteer data...")
         download_results = {}
-        for gazetteer in ["geonames", "wof", "btaa", "fast"]:
+        for gazetteer in ["geonames", "wof", "ogm", "fast"]:
             if check_gazetteer_data_exists(gazetteer):
                 logger.info(f"Data already exists for {gazetteer}, skipping download")
                 download_results[gazetteer] = {

@@ -16,8 +16,8 @@ load_dotenv()
 
 
 async def main():
-    mapping = await es.indices.get_mapping(index="btaa_geospatial_api")
-    props = mapping["btaa_geospatial_api"]["mappings"]["properties"]
+    mapping = await es.indices.get_mapping(index="opengeometadata_api")
+    props = mapping["opengeometadata_api"]["mappings"]["properties"]
 
     print("geo_country:")
     print(json.dumps(props.get("geo_country", {}), indent=2))

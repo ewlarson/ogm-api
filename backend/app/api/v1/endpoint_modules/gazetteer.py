@@ -26,8 +26,8 @@ from app.services.nominatim_service import (
 )
 from db.database import database
 from db.models import (
-    gazetteer_btaa,
     gazetteer_geonames,
+    gazetteer_ogm,
     gazetteer_wof_ancestors,
     gazetteer_wof_concordances,
     gazetteer_wof_geojson,
@@ -62,7 +62,7 @@ async def list_gazetteers(
             select(func.count()).select_from(gazetteer_wof_spr)
         )
 
-        btaa_count = await database.fetch_val(select(func.count()).select_from(gazetteer_btaa))
+        ogm_count = await database.fetch_val(select(func.count()).select_from(gazetteer_ogm))
 
         # Additional WOF table counts
         wof_ancestors_count = await database.fetch_val(
@@ -110,13 +110,13 @@ async def list_gazetteers(
                 },
             },
             {
-                "id": "btaa",
+                "id": "ogm",
                 "type": "gazetteer",
                 "attributes": {
-                    "name": "BTAA",
-                    "description": "Big Ten Academic Alliance Geoportal gazetteer",
-                    "record_count": btaa_count or 0,
-                    "website": "https://geo.btaa.org/",
+                    "name": "OGM",
+                    "description": "OpenGeoMetadata API gazetteer",
+                    "record_count": ogm_count or 0,
+                    "website": "https://opengeometadata.org/",
                 },
             },
         ]
@@ -147,8 +147,8 @@ async def search_all_gazetteers(
                 return await search_geonames(request, q, limit, offset)
             elif gazetteer == "wof":
                 return await search_wof(request, q, limit, offset)
-            elif gazetteer == "btaa":
-                return await search_btaa(request, q, limit, offset)
+            elif gazetteer == "ogm":
+                return await search_ogm(request, q, limit, offset)
             else:
                 raise HTTPException(status_code=400, detail="Invalid gazetteer specified")
 
@@ -156,7 +156,7 @@ async def search_all_gazetteers(
         results = {}
         results["geonames"] = await search_geonames(request, q, limit, offset)
         results["wof"] = await search_wof(request, q, limit, offset)
-        results["btaa"] = await search_btaa(request, q, limit, offset)
+        results["ogm"] = await search_ogm(request, q, limit, offset)
 
         # Extract data from JSONResponse objects for the combined response
         combined_results = {}
@@ -214,15 +214,15 @@ async def search_nominatim(
         raise HTTPException(status_code=502, detail="Nominatim request failed") from exc
 
 
-@router.get("/gazetteers/btaa/search", response_model=JSONAPIResponse)
+@router.get("/gazetteers/ogm/search", response_model=JSONAPIResponse)
 @cached_endpoint(ttl=GAZETTEER_CACHE_TTL)
-async def search_btaa(
+async def search_ogm(
     request: Request,
     q: str = Query(..., description="Search query"),
     limit: int = Query(10, description="Maximum number of results", ge=1, le=100),
     offset: int = Query(0, description="Number of results to skip", ge=0),
 ):
-    """Search BTAA gazetteer."""
+    """Search OGM gazetteer."""
     try:
         # Build search query
         search_terms = q.split()
@@ -231,14 +231,14 @@ async def search_btaa(
         for term in search_terms:
             conditions.append(
                 or_(
-                    gazetteer_btaa.c.fast_area.ilike(f"%{term}%"),
+                    gazetteer_ogm.c.fast_area.ilike(f"%{term}%"),
                 )
             )
 
         query = (
-            select(gazetteer_btaa)
+            select(gazetteer_ogm)
             .where(and_(*conditions))
-            .order_by(gazetteer_btaa.c.fast_area)
+            .order_by(gazetteer_ogm.c.fast_area)
             .limit(limit)
             .offset(offset)
         )
@@ -255,14 +255,14 @@ async def search_btaa(
             # Format as JSON:API resource
             formatted_row = {
                 "id": str(row_dict.get("id", "")),
-                "type": "btaa",
+                "type": "ogm",
                 "attributes": row_dict,
             }
             data.append(formatted_row)
 
         # Create meta and links using utility function with strong parameters
         meta, links = create_gazetteer_meta_and_links(
-            request, q, limit, offset, len(data), "btaa", allowed_params=GAZETTEER_ALLOWED_PARAMS
+            request, q, limit, offset, len(data), "ogm", allowed_params=GAZETTEER_ALLOWED_PARAMS
         )
 
         # Create JSON:API compliant response
@@ -284,8 +284,8 @@ async def search_btaa(
         return JSONResponse(content=reordered_response)
 
     except Exception as e:
-        logger.error(f"Error searching BTAA: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to search BTAA") from e
+        logger.error(f"Error searching OGM: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to search OGM") from e
 
 
 @router.get("/gazetteers/geonames/search", response_model=JSONAPIResponse)

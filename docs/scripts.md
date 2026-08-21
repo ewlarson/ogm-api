@@ -103,7 +103,7 @@ At the repo root:
 Imports `geobtaa/api/backend` into this repo's `backend/` directory. It uses
 `git subtree split` to create a backend-only source branch, protects
 OpenGeoMetadata-owned backend files listed in `config/ogm-owned-paths.txt`, and
-records applied import metadata in `config/geobtaa-backend-source.env`.
+records applied import metadata in `config/upstream-backend-source.env`.
 
 Dry run:
 

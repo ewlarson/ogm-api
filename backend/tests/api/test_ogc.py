@@ -28,18 +28,18 @@ def test_ogc_collections():
     assert response.status_code == 200
     data = response.json()
     assert "collections" in data
-    assert data["collections"][0]["id"] == "btaa-records"
+    assert data["collections"][0]["id"] == "ogm-records"
 
 
 def test_ogc_collection():
-    response = client.get("/api/v1/ogc/collections/btaa-records")
+    response = client.get("/api/v1/ogc/collections/ogm-records")
     assert response.status_code == 200
     data = response.json()
-    assert data["id"] == "btaa-records"
+    assert data["id"] == "ogm-records"
 
 
 def test_ogc_queryables():
-    response = client.get("/api/v1/ogc/collections/btaa-records/queryables")
+    response = client.get("/api/v1/ogc/collections/ogm-records/queryables")
     assert response.status_code == 200
     data = response.json()
     assert data["$schema"] == "https://json-schema.org/draft/2019-09/schema"
@@ -47,7 +47,7 @@ def test_ogc_queryables():
 
 
 def test_ogc_sortables():
-    response = client.get("/api/v1/ogc/collections/btaa-records/sortables")
+    response = client.get("/api/v1/ogc/collections/ogm-records/sortables")
     assert response.status_code == 200
     data = response.json()
     assert "properties" in data
@@ -72,7 +72,7 @@ def test_ogc_items(mock_search_service_class):
         ],
     }
 
-    response = client.get("/api/v1/ogc/collections/btaa-records/items?q=test&limit=10&sortby=title")
+    response = client.get("/api/v1/ogc/collections/ogm-records/items?q=test&limit=10&sortby=title")
     assert response.status_code == 200
     data = response.json()
 
@@ -100,7 +100,7 @@ def test_ogc_item(mock_search_service_class):
         }
     }
 
-    response = client.get("/api/v1/ogc/collections/btaa-records/items/test-123")
+    response = client.get("/api/v1/ogc/collections/ogm-records/items/test-123")
     assert response.status_code == 200
     data = response.json()
 

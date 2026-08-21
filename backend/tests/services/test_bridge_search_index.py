@@ -53,7 +53,7 @@ async def test_index_changed_resources_indexes_every_changed_id_even_if_legacy_l
 
     monkeypatch.setenv("BRIDGE_SEARCH_INDEX_REFRESH_ENABLED", "true")
     monkeypatch.setenv("BRIDGE_SEARCH_INDEX_MAX_RESOURCE_IDS", "1")
-    monkeypatch.setenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+    monkeypatch.setenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
     monkeypatch.setattr(search_index, "database", fake_database)
     monkeypatch.setattr(search_index, "es", fake_es)
     monkeypatch.setattr(search_index, "process_resource", fake_process_resource)
@@ -77,7 +77,7 @@ async def test_index_changed_resources_indexes_every_changed_id_even_if_legacy_l
         "resource-2",
     ]
     assert fake_database.fetch_calls == 3
-    assert fake_es.indices.refreshed == ["btaa_geospatial_api"]
+    assert fake_es.indices.refreshed == ["opengeometadata_api"]
 
 
 @pytest.mark.asyncio

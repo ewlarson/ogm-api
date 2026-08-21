@@ -38,7 +38,7 @@ class TestCitationFormatsServiceJsonLd:
         assert ld["url"] == "https://geo.example.org/resources/test-uuid-123"
         assert ld["@id"] == ld["url"]
         assert ld["publisher"]["name"] == "University of Test"
-        assert ld["includedInDataCatalog"]["name"] == "Big Ten Academic Alliance Geoportal"
+        assert ld["includedInDataCatalog"]["name"] == "OpenGeoMetadata API"
 
     def test_json_ld_map_type(self):
         doc = {
@@ -150,7 +150,7 @@ class TestCitationServiceFormalStyles:
         mla = svc.get_citation("mla")
         assert "Doe, Jane." in mla
         assert '"Historic Map."' in mla
-        assert "Big Ten Academic Alliance Geoportal" in mla
+        assert "OpenGeoMetadata API" in mla
 
     def test_chicago_format(self):
         from app.services.citation_service import CitationService
@@ -165,7 +165,7 @@ class TestCitationServiceFormalStyles:
         assert "Author" in chicago
         assert "2024" in chicago
         assert "Chicago Test" in chicago
-        assert "Big Ten Academic Alliance" in chicago
+        assert "OpenGeoMetadata" in chicago
 
     def test_get_all_citations(self):
         from app.services.citation_service import CitationService

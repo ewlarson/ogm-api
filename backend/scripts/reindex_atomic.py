@@ -580,7 +580,7 @@ async def _prune_old_versioned_indices(
 
 
 async def main() -> None:
-    base_alias = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+    base_alias = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
     published_only = _env_bool("PUBLISHED_ONLY", True)
     use_b1g_pub_state = _env_bool("USE_B1G_PUBLICATION_STATE", False)
     chunk_size = _env_int("REINDEX_ATOMIC_CHUNK_SIZE", 2000)

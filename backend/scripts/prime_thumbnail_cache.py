@@ -86,7 +86,7 @@ from db.models import resource_thumbnail_state, resources  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"
+USER_AGENT = "OpenGeoMetadata-API/1.0 (https://opengeometadata.org/)"
 FALLBACK_ICON_DETAIL = "OGM resource-class fallback icon materialized"
 REMOTE_THUMBNAIL_MAX_BYTES = int(os.getenv("REMOTE_THUMBNAIL_MAX_BYTES", str(20 * 1024 * 1024)))
 

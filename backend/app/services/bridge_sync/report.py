@@ -358,7 +358,7 @@ def build_bridge_sync_report_html(
     };">
             <tr>
               <td style="background:{BRAND_BLUE}; padding:30px 32px 26px;">
-                <div style="color:#BFD8E8; font-size:12px; text-transform:uppercase; font-weight:800;">BTAA Geoportal</div>
+                <div style="color:#BFD8E8; font-size:12px; text-transform:uppercase; font-weight:800;">OpenGeoMetadata API</div>
                 <h1 style="margin:8px 0 0; color:#ffffff; font-size:30px; line-height:1.15;">Nightly Bridge Sync Report</h1>
                 <p style="margin:10px 0 0; color:#E5F1F7; font-size:15px; line-height:1.5;">
                   {
@@ -480,7 +480,7 @@ def build_bridge_sync_report_html(
     }
 
                 <p style="margin:24px 0 0; color:#6B7280; font-size:12px; line-height:1.5;">
-                  Sent automatically after the bridge sync task finalized. Colors and visual rhythm follow the BTAA Geoportal interface: deep BTAA blue, active blue, white panels, and quiet slate metadata.
+                  Sent automatically after the bridge sync task finalized. Colors and visual rhythm follow the OpenGeoMetadata API interface: deep OGM blue, active blue, white panels, and quiet slate metadata.
                 </p>
               </td>
             </tr>
@@ -500,7 +500,7 @@ def build_bridge_sync_report_text(
     stats = _stats_for_run(run)
     alerts = _alert_items(run, recent_runs or [])
     lines = [
-        "BTAA Geoportal Nightly Bridge Sync Report",
+        "OpenGeoMetadata API Nightly Bridge Sync Report",
         f"Run: #{run.get('bridge_id')}",
         f"Status: {run.get('bridge_status') or 'unknown'}",
         f"Trigger: {run.get('bridge_trigger') or 'unknown'}",
@@ -530,7 +530,7 @@ def _build_message(
 ) -> EmailMessage:
     stats = _stats_for_run(run)
     status = str(run.get("bridge_status") or "unknown").upper()
-    subject_prefix = os.getenv("BRIDGE_SYNC_REPORT_SUBJECT_PREFIX", "BTAA Geoportal")
+    subject_prefix = os.getenv("BRIDGE_SYNC_REPORT_SUBJECT_PREFIX", "OpenGeoMetadata API")
     environment = os.getenv("KAMAL_DEST") or os.getenv("APP_ENV") or os.getenv("RAILS_ENV")
     subject_env = f" [{environment}]" if environment else ""
     subject = (
@@ -540,15 +540,15 @@ def _build_message(
 
     sender = os.getenv("BRIDGE_SYNC_REPORT_FROM") or os.getenv("SMTP_FROM")
     if not sender:
-        sender = "BTAA Geoportal <no-reply@geo.btaa.org>"
+        sender = "OpenGeoMetadata API <no-reply@ogm.geo4lib.app>"
     if "<" not in sender and ">" not in sender:
-        sender = formataddr(("BTAA Geoportal", sender))
+        sender = formataddr(("OpenGeoMetadata API", sender))
 
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = sender
     message["To"] = ", ".join(recipients)
-    message["Message-ID"] = make_msgid(domain="geo.btaa.org")
+    message["Message-ID"] = make_msgid(domain="ogm.geo4lib.app")
     message.set_content(build_bridge_sync_report_text(run, recent_runs=recent_runs))
     message.add_alternative(
         build_bridge_sync_report_html(run, recent_runs=recent_runs, environment=environment),

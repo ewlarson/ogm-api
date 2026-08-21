@@ -316,7 +316,7 @@ def fetch_and_cache_image(self, url: str, doc_id: Optional[str] = None) -> bool:
         # Use User-Agent header to avoid 403 errors from servers that block bots
         # Some ArcGIS ImageServer exportImage URLs can take 15-30s when server is cold
         fetch_timeout = int(os.getenv("THUMBNAIL_FETCH_TIMEOUT", "30"))
-        headers = {"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"}
+        headers = {"User-Agent": "OpenGeoMetadata-API/1.0 (https://opengeometadata.org/)"}
         with provider_request_slot(resolved_url, action="thumbnail fetch") as lease:
             fetched = fetch_public_http_bytes(
                 resolved_url,
@@ -613,7 +613,7 @@ def _render_pdf_first_page(pdf_bytes: bytes) -> Optional[bytes]:
 
 def _generate_pdf_thumbnail_bytes(pdf_url: str) -> Optional[bytes]:
     """Fetch a public, bounded PDF and render its first page to PNG."""
-    headers = {"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"}
+    headers = {"User-Agent": "OpenGeoMetadata-API/1.0 (https://opengeometadata.org/)"}
     fetched = fetch_public_http_bytes(
         pdf_url,
         timeout=int(os.getenv("THUMBNAIL_FETCH_TIMEOUT", "30")),
@@ -931,7 +931,7 @@ def _http_get_bytes(url: str):
         fetch_len = max(length, 512)
         end = offset + fetch_len - 1
         headers = {
-            "User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)",
+            "User-Agent": "OpenGeoMetadata-API/1.0 (https://opengeometadata.org/)",
             "Range": f"bytes={offset}-{end}",
             # Avoid gzip: range of gzip stream is not independently decompressible.
             "Accept-Encoding": "identity",

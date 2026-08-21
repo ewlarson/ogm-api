@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Ingest BTAA fixture JSON files into the database.
+Ingest OGM fixture JSON files into the database.
 
-Reads all JSON files from data/fixtures/btaa_fixtures_data/ and imports them
+Reads all JSON files from data/fixtures/ogm_fixtures_data/ and imports them
 using the OGMResourceImporter.
 """
 
@@ -40,13 +40,13 @@ async def load_json_file(file_path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def ingest_btaa_fixtures(fixtures_dir: Path, repo_name: str = "btaa_fixtures"):
+async def ingest_ogm_fixtures(fixtures_dir: Path, repo_name: str = "ogm_fixtures"):
     """
     Ingest all JSON fixture files from the specified directory.
 
     Args:
         fixtures_dir: Path to directory containing JSON fixture files
-        repo_name: Repository name to use for tagging (default: "btaa_fixtures")
+        repo_name: Repository name to use for tagging (default: "ogm_fixtures")
     """
     if not fixtures_dir.exists():
         logger.error(f"Fixtures directory not found: {fixtures_dir}")
@@ -104,10 +104,10 @@ async def main():
             await database.connect()
             logger.info("Database connection established")
 
-        # Fixtures dir: default btaa_fixtures_data, or first CLI arg (e.g. btaa_featured_resources).
+        # Fixtures dir: default ogm_fixtures_data, or first CLI arg (e.g. ogm_featured_resources).
         script_dir = Path(__file__).parent
         project_root = script_dir.parent
-        fixtures_subdir = sys.argv[1] if len(sys.argv) > 1 else "btaa_fixtures_data"
+        fixtures_subdir = sys.argv[1] if len(sys.argv) > 1 else "ogm_fixtures_data"
         repo_name = (
             sys.argv[2]
             if len(sys.argv) > 2
@@ -118,7 +118,7 @@ async def main():
         logger.info(f"Fixtures directory: {fixtures_dir} (repo_name={repo_name})")
 
         # Ingest fixtures
-        await ingest_btaa_fixtures(fixtures_dir, repo_name=repo_name)
+        await ingest_ogm_fixtures(fixtures_dir, repo_name=repo_name)
 
     except Exception as e:
         logger.error(f"Error in main: {e}", exc_info=True)

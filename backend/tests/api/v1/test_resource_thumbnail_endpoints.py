@@ -211,7 +211,7 @@ class TestResourceThumbnailCogFlow:
         mock_session.return_value.__aenter__.return_value = mock_session_instance
 
         resource_id = "test-bridge-asset"
-        asset_url = "https://geobtaa-assets-prod.s3.us-east-2.amazonaws.com/store/asset/x/thumb.png"
+        asset_url = "https://geoogm-assets-prod.s3.us-east-2.amazonaws.com/store/asset/x/thumb.png"
         image_hash = _remote_thumbnail_image_hash(asset_url)
         mock_row = _resource_row(resource_id, "{}")
         mock_result = MagicMock()

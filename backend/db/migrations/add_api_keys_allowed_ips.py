@@ -31,18 +31,18 @@ def add_api_keys_allowed_ips_column():
     """Add allowed_ips JSON column to api_keys table."""
     try:
         # Get database URL from environment and ensure it's synchronous
-        database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api_test")
+        database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api_test")
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
         
         # Handle Docker hostnames for local development (only if NOT running in Docker)
         is_docker = os.getenv("IS_DOCKER", "false").lower() == "true"
         if not is_docker:
             parsed = urlparse(sync_database_url)
-            if parsed.hostname and ("paradedb" in parsed.hostname or "btaa-geospatial-api" in parsed.hostname):
+            if parsed.hostname and "paradedb" in parsed.hostname:
                 local_port = os.getenv("DB_PORT", "2345")
                 local_user = os.getenv("DB_USER", "postgres")
                 local_password = os.getenv("DB_PASSWORD", "postgres")
-                local_db = os.getenv("DB_NAME", parsed.path.lstrip("/") if parsed.path else "btaa_geospatial_api")
+                local_db = os.getenv("DB_NAME", parsed.path.lstrip("/") if parsed.path else "opengeometadata_api")
                 
                 new_netloc = f"{local_user}:{local_password}@localhost:{local_port}"
                 sync_database_url = urlunparse(parsed._replace(netloc=new_netloc, path=f"/{local_db}"))
@@ -78,4 +78,3 @@ def add_api_keys_allowed_ips_column():
 
 if __name__ == "__main__":
     add_api_keys_allowed_ips_column()
-

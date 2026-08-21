@@ -7,7 +7,7 @@ from app.main import app
 
 # Set the database URL for tests
 os.environ["DATABASE_URL"] = (
-    "postgresql+asyncpg://postgres:postgres@localhost:2346/btaa_ogm_api_test"
+    "postgresql+asyncpg://postgres:postgres@localhost:2346/ogm_ogm_api_test"
 )
 
 

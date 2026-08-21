@@ -58,4 +58,4 @@ def test_slack_command_dispatches_valid_signed_payload(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["response_type"] == "ephemeral"
-    assert "BTAA Geoportal" in response.json()["blocks"][0]["text"]["text"]
+    assert "OpenGeoMetadata API" in response.json()["blocks"][0]["text"]["text"]

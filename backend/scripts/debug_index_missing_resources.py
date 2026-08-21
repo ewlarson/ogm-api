@@ -150,7 +150,7 @@ async def _index_one(index_name: str, resource_id: str) -> Tuple[bool, Optional[
 
 async def main(argv: List[str]) -> int:
     args = _parse_args(argv)
-    index_name = args.index_name or "btaa_geospatial_api"
+    index_name = args.index_name or "opengeometadata_api"
 
     await database.connect()
     try:

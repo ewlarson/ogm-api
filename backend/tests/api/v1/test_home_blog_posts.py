@@ -18,7 +18,7 @@ async def test_home_blog_posts_endpoint(async_client, monkeypatch):
                     "excerpt": "Pinned excerpt",
                     "published_at": "2026-02-02T00:00:00",
                     "category": "update",
-                    "authors": ["BTAA-GIN Staff"],
+                    "authors": ["OGM-GIN Staff"],
                     "tags": ["Program Updates"],
                     "image_url": None,
                     "image_alt": None,
@@ -33,7 +33,7 @@ async def test_home_blog_posts_endpoint(async_client, monkeypatch):
 
     monkeypatch.setattr(home_module.gin_blog_service, "list_home_posts", mock_list_home_posts)
 
-    response = await async_client.get("/api/v1/home/blog-posts?limit=2&theme=btaa")
+    response = await async_client.get("/api/v1/home/blog-posts?limit=2&theme=ogm")
     assert response.status_code == 200
     payload = response.json()
     assert payload["meta"]["total_count"] == 1

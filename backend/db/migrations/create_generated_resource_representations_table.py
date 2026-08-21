@@ -22,7 +22,7 @@ def create_generated_resource_representations_table() -> None:
     """Create durable storage for generated JSON:API resource and response caches."""
     database_url = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api_test",
+        "postgresql://postgres:postgres@localhost:2345/opengeometadata_api_test",
     )
     sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
     engine = create_engine(sync_database_url)

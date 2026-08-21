@@ -4,6 +4,8 @@ OpenGeoMetadata API is a deployable search, harvest, and delivery service for
 public [OpenGeoMetadata](https://opengeometadata.org/) Aardvark records. It is
 being prepared as the reference API node for the proposed
 [OpenGeoMetadata API Mirror Network](https://github.com/OpenGeoMetadata/ogm-mirror-network).
+The current reference node is live at
+[ogm.geo4lib.app/api/docs](https://ogm.geo4lib.app/api/docs).
 
 > [!IMPORTANT]
 > The mirror-network proposal is a **Draft for Community Discussion**
@@ -62,8 +64,23 @@ public `GET` and `HEAD` routes.
 The backend began from the `geobtaa/api` backend subtree and now carries an
 OpenGeoMetadata-owned harvesting, branding, deployment, and cache overlay. It
 is not a Git fork with mergeable history. See
-[BTAA backend reconciliation](docs/upstream_reconciliation.md) for the pinned
+[Upstream backend reconciliation](docs/upstream_reconciliation.md) for the pinned
 source baseline, selective-port decisions, and accepted upstream fixes.
+
+## Identity compatibility invariants
+
+Product-facing names, routes, defaults, assets, and documentation use OGM or
+OpenGeoMetadata. A small number of historical strings remain deliberately:
+
+- the production PostgreSQL database and populated gazetteer table retain
+  their physical names until they can be changed with separate, staged data
+  migrations;
+- API keys created with the previous fallback hash salt remain valid and are
+  upgraded to the OGM salt after successful authentication; and
+- real upstream repository, GIN, linked-data, asset, and fixture-provenance
+  URLs retain the names of the external resources they identify.
+
+Run `make identity-check` to reject new, unapproved legacy branding.
 
 ## Local development
 
@@ -154,10 +171,10 @@ Redis.
 
 ## Releases and upstream provenance
 
-OGM product versions and BTAA backend provenance are separate:
+OGM product versions and upstream backend provenance are separate:
 
 - the product version describes this repository's API contract and release;
-- `config/geobtaa-backend-source.env` records the last complete BTAA subtree
+- `config/upstream-backend-source.env` records the last complete upstream subtree
   import; and
 - `docs/upstream_reconciliation.md` records selective ports made after that
   import.
@@ -190,7 +207,7 @@ Read these before an operational change:
 - [Repository transfer runbook](docs/repository_transfer.md)
 - [Repository transfer rehearsal](docs/repository_transfer_rehearsal.md)
 - [Pre-transfer branch inventory](docs/repository_branch_inventory.md)
-- [BTAA backend reconciliation](docs/upstream_reconciliation.md)
+- [Upstream backend reconciliation](docs/upstream_reconciliation.md)
 - [Backend sync design](docs/backend_upstream_sync.md)
 
 Never change the Kamal service name, persistent volume paths, repository owner,

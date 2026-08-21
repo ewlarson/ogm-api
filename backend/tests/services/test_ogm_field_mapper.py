@@ -31,11 +31,11 @@ class TestOGMFieldMapper:
         assert "gbl_resourcetype_sm" in mapping
         assert mapping["gbl_resourcetype_sm"] == "gbl_resourceType_sm"
 
-    def test_field_mapping_contains_btaa_specific_fields(self):
-        """Test that the field mapping contains BTAA-specific fields."""
+    def test_field_mapping_contains_ogm_specific_fields(self):
+        """Test that the field mapping contains OGM-specific fields."""
         mapping = OGMFieldMapper.FIELD_MAPPING
 
-        # Test some BTAA-specific fields
+        # Test some OGM-specific fields
         assert "b1g_code_s" in mapping
         assert mapping["b1g_code_s"] == "b1g_code_s"  # No change needed
 
@@ -137,7 +137,7 @@ class TestOGMFieldMapper:
             "gbl_suppressed_b": False,
             "gbl_georeferenced_b": True,
             "gbl_displaynote_sm": "Test note",
-            # BTAA-specific fields
+            # OGM-specific fields
             "b1g_code_s": "BTA-001",
             "b1g_status_s": "active",
             "b1g_dct_accrualmethod_s": "RPA",
@@ -192,7 +192,7 @@ class TestOGMFieldMapper:
         assert result["gbl_georeferenced_b"] is True
         assert result["gbl_displayNote_sm"] == "Test note"
 
-        # Verify BTAA fields
+        # Verify OGM fields
         assert result["b1g_dct_accrualMethod_s"] == "RPA"
         assert result["b1g_dct_accrualPeriodicity_s"] == "irregular"
         assert result["b1g_dateAccessioned_s"] == "2023-01-01"

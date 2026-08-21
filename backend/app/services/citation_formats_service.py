@@ -62,7 +62,7 @@ class CitationFormatsService:
         self,
         document: Dict[str, Any],
         distribution_context: Optional[DistributionContext] = None,
-        base_url: str = "https://geoportal.btaa.org",
+        base_url: str = "https://ogm.geo4lib.app",
     ):
         self.document = document
         self.distribution_context = distribution_context or DistributionContext(
@@ -194,7 +194,7 @@ class CitationFormatsService:
         # Included in DataCatalog (Geoportal)
         obj["includedInDataCatalog"] = {
             "@type": "DataCatalog",
-            "name": "Big Ten Academic Alliance Geoportal",
+            "name": "OpenGeoMetadata API",
             "url": self.base_url,
         }
         # Distribution (download/view links)

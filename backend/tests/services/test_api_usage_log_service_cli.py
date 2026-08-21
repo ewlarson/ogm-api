@@ -12,11 +12,11 @@ def test_cli_headers_and_api_key_id_are_preserved_in_usage_log_payload():
     request.client.host = "192.0.2.10"
     request.query_params = {"q": "water"}
     request.headers = {
-        "User-Agent": "BTAA-Geo-API-CLI/0.1.0",
-        "X-BTAA-Client-Name": "btaa-geo-api-cli",
-        "X-BTAA-Client-Version": "0.1.0",
-        "X-BTAA-Client-Channel": "cli",
-        "X-BTAA-Client-Instance": "instance-1",
+        "User-Agent": "OGM-Geo-API-CLI/0.1.0",
+        "X-OGM-Client-Name": "ogm-api-cli",
+        "X-OGM-Client-Version": "0.1.0",
+        "X-OGM-Client-Channel": "cli",
+        "X-OGM-Client-Instance": "instance-1",
     }
 
     payload = APIUsageLogService()._build_log_entry(
@@ -29,8 +29,8 @@ def test_cli_headers_and_api_key_id_are_preserved_in_usage_log_payload():
 
     assert payload["api_key_id"] == 42
     assert payload["tier_id"] == 7
-    assert payload["client_name"] == "btaa-geo-api-cli"
+    assert payload["client_name"] == "ogm-api-cli"
     assert payload["client_channel"] == "cli"
     assert payload["client_instance"] == "instance-1"
-    assert payload["user_agent"] == "BTAA-Geo-API-CLI/0.1.0"
+    assert payload["user_agent"] == "OGM-Geo-API-CLI/0.1.0"
     assert payload["properties"]["query_params"] == {"q": "water"}

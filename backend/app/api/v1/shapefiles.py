@@ -27,7 +27,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # DuckDB configuration
-DUCKDB_DATABASE_PATH = os.getenv("DUCKDB_DATABASE_PATH", "data/duckdb/btaa_ogm_api.duckdb")
+DUCKDB_DATABASE_PATH = os.getenv("DUCKDB_DATABASE_PATH", "data/duckdb/opengeometadata_api.duckdb")
 
 # Ensure the DuckDB directory exists
 os.makedirs(os.path.dirname(DUCKDB_DATABASE_PATH), exist_ok=True)
