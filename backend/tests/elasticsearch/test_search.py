@@ -804,13 +804,13 @@ class TestElasticsearchSearch:
                 "total": {"value": 5, "relation": "eq"},
                 "hits": [
                     {
-                        "_index": "btaa_ogm_api",
+                        "_index": "opengeometadata_api",
                         "_id": "baseline-1",
                         "_score": 1.0,
                         "_source": {"id": "baseline-1"},
                     },
                     {
-                        "_index": "btaa_ogm_api",
+                        "_index": "opengeometadata_api",
                         "_id": "baseline-2",
                         "_score": 0.9,
                         "_source": {"id": "baseline-2"},
@@ -827,7 +827,7 @@ class TestElasticsearchSearch:
                 "total": {"value": 1, "relation": "eq"},
                 "hits": [
                     {
-                        "_index": "btaa_ogm_api",
+                        "_index": "opengeometadata_api",
                         "_id": "geo-1",
                         "_score": 1.0,
                         "_source": {"id": "geo-1"},

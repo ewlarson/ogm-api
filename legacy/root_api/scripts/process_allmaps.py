@@ -19,7 +19,7 @@ from db.models import item_allmaps, items
 sys.path.append(str(Path(__file__).parent))
 
 # Set the correct database URL for local scripts
-DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_ogm_api"
+DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api"
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

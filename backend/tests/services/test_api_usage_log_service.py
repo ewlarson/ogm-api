@@ -14,14 +14,14 @@ def _build_request():
         method="GET",
         headers={
             "User-Agent": "TestAgent/1.0",
-            "Referer": "https://geo.btaa.org/search?q=maps",
+            "Referer": "https://ogm.geo4lib.app/search?q=maps",
             "X-Visit-Token": "visit-123",
             "X-Forwarded-For": "203.0.113.10, 10.0.0.2",
-            "Origin": "https://geo.btaa.org",
-            "X-BTAA-Client-Name": "geoportal-web",
-            "X-BTAA-Client-Version": "test-build",
-            "X-BTAA-Client-Channel": "browser",
-            "X-BTAA-Client-Instance": "dev-local",
+            "Origin": "https://ogm.geo4lib.app",
+            "X-OGM-Client-Name": "geoportal-web",
+            "X-OGM-Client-Version": "test-build",
+            "X-OGM-Client-Channel": "browser",
+            "X-OGM-Client-Instance": "dev-local",
         },
         query_params=QueryParams("q=maps&utm_source=geoportal&utm_campaign=spring-launch"),
         client=SimpleNamespace(host="127.0.0.1"),
@@ -55,16 +55,16 @@ async def test_log_request_queues_celery_payload(monkeypatch):
     assert payload["response_time_ms"] == 87
     assert payload["ip_address"] == "203.0.113.10"
     assert payload["visit_token"] == "visit-123"
-    assert payload["referring_domain"] == "geo.btaa.org"
+    assert payload["referring_domain"] == "ogm.geo4lib.app"
     assert payload["utm_source"] == "geoportal"
     assert payload["utm_campaign"] == "spring-launch"
     assert payload["properties"]["query_params"] == {"q": "maps"}
-    assert payload["properties"]["origin"] == "https://geo.btaa.org"
+    assert payload["properties"]["origin"] == "https://ogm.geo4lib.app"
     assert payload["client_name"] == "geoportal-web"
     assert payload["client_version"] == "test-build"
     assert payload["client_channel"] == "browser"
     assert payload["client_instance"] == "dev-local"
-    assert payload["source_host"] == "geo.btaa.org"
+    assert payload["source_host"] == "ogm.geo4lib.app"
     assert (
         payload["partition_month"]
         == datetime.fromisoformat(payload["requested_at"]).date().replace(day=1).isoformat()

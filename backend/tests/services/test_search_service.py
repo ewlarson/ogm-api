@@ -71,10 +71,10 @@ class TestSearchService:
         assert hasattr(service, "es")
         # In test environment, the index name might be different
         assert service.index_name in [
-            "btaa_geospatial_api",
-            "btaa_geospatial_api_test",
-            "btaa_ogm_api_test",
-            "btaa_ogm_api",
+            "opengeometadata_api",
+            "opengeometadata_api_test",
+            "opengeometadata_api_test",
+            "opengeometadata_api",
             "opengeometadata_api_test",
             "opengeometadata_api",
         ]
@@ -688,7 +688,7 @@ class TestSearchService:
             "fq[language_agg][]=English&"
             "fq[creator_agg][]=Test Creator&"
             "fq[provider_agg][]=Test Provider&"
-            "fq[b1g_code_s][]=BTAA&"
+            "fq[b1g_code_s][]=OGM&"
             "fq[access_rights_agg][]=Public&"
             "fq[georeferenced_agg][]=true&"
             "fq[map_overlay_agg][]=true&"
@@ -708,7 +708,7 @@ class TestSearchService:
         assert result["b1g_language_sm"] == ["English"]
         assert result["dct_creator_sm"] == ["Test Creator"]
         assert result["schema_provider_s"] == ["Test Provider"]
-        assert result["b1g_code_s"] == ["BTAA"]
+        assert result["b1g_code_s"] == ["OGM"]
         assert result["dct_accessRights_s"] == ["Public"]
         assert result["gbl_georeferenced_b"] == ["true"]
         assert result["b1g_georeferenced_allmaps_b"] == ["true"]

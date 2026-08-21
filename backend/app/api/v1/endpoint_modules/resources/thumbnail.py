@@ -121,7 +121,7 @@ async def _probe_thumbnail_url(url: str) -> bool:
     Used to avoid serving a queued-thumbnail fallback when the source is 404 or invalid.
     """
     try:
-        headers = {"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"}
+        headers = {"User-Agent": "OpenGeoMetadata-API/1.0 (https://opengeometadata.org/)"}
         timeout = aiohttp.ClientTimeout(total=THUMBNAIL_PROBE_TIMEOUT)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers) as resp:

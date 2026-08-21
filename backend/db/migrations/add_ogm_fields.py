@@ -13,11 +13,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def add_btaa_ogm_fields():
-    """Add BTAA-specific OGM Aardvark fields to the resources table."""
+def add_ogm_fields():
+    """Add OGM-specific OGM Aardvark fields to the resources table."""
     try:
         # Get database URL from environment and ensure it's synchronous
-        database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_ogm_api")
+        database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api")
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
         
         # Create engine
@@ -26,12 +26,12 @@ def add_btaa_ogm_fields():
 
         # Check if the table exists
         if not inspector.has_table("resources"):
-            logger.error("Resources table does not exist. Cannot add BTAA fields.")
+            logger.error("Resources table does not exist. Cannot add OGM fields.")
             return
 
         with engine.connect() as conn:
-            # List of BTAA fields to add
-            btaa_fields = [
+            # List of OGM fields to add
+            ogm_fields = [
                 ("b1g_code_s", "VARCHAR"),
                 ("b1g_status_s", "VARCHAR"),
                 ("b1g_dct_accrualmethod_s", "VARCHAR"),
@@ -54,7 +54,7 @@ def add_btaa_ogm_fields():
             ]
 
             # Add each field if it doesn't exist
-            for field_name, field_type in btaa_fields:
+            for field_name, field_type in ogm_fields:
                 try:
                     # Try to add the column - PostgreSQL will error if it already exists
                     conn.execute(text(f"ALTER TABLE resources ADD COLUMN {field_name} {field_type}"))
@@ -66,12 +66,12 @@ def add_btaa_ogm_fields():
                         logger.warning(f"Could not add column {field_name}: {e}")
 
             conn.commit()
-            logger.info("Successfully added BTAA OGM fields to resources table.")
+            logger.info("Successfully added OGM fields to resources table.")
 
     except Exception as e:
-        logger.error(f"Error adding BTAA OGM fields: {e}")
+        logger.error(f"Error adding OGM fields: {e}")
         raise
 
 
 if __name__ == "__main__":
-    add_btaa_ogm_fields()
+    add_ogm_fields()

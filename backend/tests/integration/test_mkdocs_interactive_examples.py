@@ -21,7 +21,7 @@ PRODUCTION_API_BASE_URL = "https://lib-geoportal-prd-web-01.oit.umn.edu"
 URBAN_BASE_LAYERS_COLLECTION_ID = "b1g_urbanBaseLayers"
 DISPLAY_NOTE_PREFIX_REGRESSION_RESOURCE_ID = "b1g_2Lx2SCAOw85E"
 DISPLAY_NOTE_PREFIX_REGRESSION_BODY = (
-    "This dataset is a historical version held by the BTAA-GIN. "
+    "This dataset is a historical version held by the OGM-GIN. "
     "For the most current layer, consult Open Data Minneapolis"
 )
 _LAST_LIVE_REQUEST_AT: float | None = None
@@ -204,8 +204,8 @@ def _is_frontend_turnstile_gate(response: requests.Response) -> bool:
     visible_text = _visible_text_from_html(response.text)
     return (
         "Browser verification" in visible_text
-        and "Continue to the BTAA Geoportal" in visible_text
-        and "Complete the verification check to continue to the BTAA Geoportal" in visible_text
+        and "Continue to the OpenGeoMetadata API" in visible_text
+        and "Complete the verification check to continue to the OpenGeoMetadata API" in visible_text
     )
 
 

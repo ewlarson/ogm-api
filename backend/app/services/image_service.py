@@ -161,7 +161,7 @@ class ImageService:
         try:
             self.logger.info(f"🐌 Cache MISS for manifest {manifest_url}")
             # Use User-Agent header to avoid 403 errors from servers that block bots
-            headers = {"User-Agent": "BTAA-Geospatial-Data-API/1.0 (https://geo.btaa.org/)"}
+            headers = {"User-Agent": "OpenGeoMetadata-API/1.0 (https://opengeometadata.org/)"}
             # Increased timeout for slow servers
             response = requests.get(manifest_url, timeout=5.0, headers=headers)
 

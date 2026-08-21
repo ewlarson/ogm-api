@@ -46,8 +46,8 @@ def _sync_database_url(database_url: str) -> str:
         parsed = urlparse(sync_url)
         docker_hostnames = {
             "paradedb",
-            "btaa-geospatial-api-paradedb",
-            "btaa-geospatial-api-paradedb-1",
+            "opengeometadata-api-paradedb",
+            "opengeometadata-api-paradedb-1",
         }
         if parsed.hostname in docker_hostnames:
             new_netloc = f"{parsed.username}:{parsed.password}@localhost:2345"

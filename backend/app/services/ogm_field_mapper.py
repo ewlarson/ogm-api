@@ -2,7 +2,7 @@
 OGM Field Mapper Service
 
 This service handles mapping between database column names (which are downcased)
-and proper OGM Aardvark field names for BTAA flavored records.
+and proper OGM Aardvark field names for OGM flavored records.
 """
 
 from typing import Any, Dict
@@ -20,7 +20,7 @@ class OGMFieldMapper:
     """
 
     # Mapping from database column names to proper OGM field names
-    # Based on the BTAA OGM Aardvark schema
+    # Based on the OGM Aardvark schema
     FIELD_MAPPING = {
         # Standard OGM Aardvark fields
         "gbl_mdversion_s": "gbl_mdVersion_s",
@@ -34,7 +34,7 @@ class OGMFieldMapper:
         "gbl_suppressed_b": "gbl_suppressed_b",
         "gbl_georeferenced_b": "gbl_georeferenced_b",
         "gbl_displaynote_sm": "gbl_displayNote_sm",
-        # BTAA-specific fields (these may not exist in current DB but are in schema)
+        # OGM-specific fields (these may not exist in current DB but are in schema)
         "b1g_code_s": "b1g_code_s",
         "b1g_status_s": "b1g_status_s",
         "b1g_dct_accrualmethod_s": "b1g_dct_accrualMethod_s",
@@ -90,7 +90,7 @@ class OGMFieldMapper:
     @classmethod
     def get_required_fields(cls) -> list:
         """
-        Returns the list of required fields according to the BTAA OGM Aardvark schema.
+        Returns the list of required fields according to the OGM Aardvark schema.
 
         Returns:
             List of required field names
@@ -114,7 +114,7 @@ class OGMFieldMapper:
     @classmethod
     def get_all_schema_fields(cls) -> list:
         """
-        Returns the list of all fields defined in the BTAA OGM Aardvark schema.
+        Returns the list of all fields defined in the OGM Aardvark schema.
 
         Returns:
             List of all schema field names

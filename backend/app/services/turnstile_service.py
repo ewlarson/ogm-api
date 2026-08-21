@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 DEFAULT_TURNSTILE_ACTION = "geoportal_gate"
-DEFAULT_TURNSTILE_COOKIE_NAME = "btaa_turnstile_session"
+DEFAULT_TURNSTILE_COOKIE_NAME = "ogm_turnstile_session"
 DEFAULT_TURNSTILE_SESSION_TTL_SECONDS = 3600
 
 

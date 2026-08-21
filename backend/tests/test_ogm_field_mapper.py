@@ -57,9 +57,9 @@ class TestOGMFieldMapper:
         result = OGMFieldMapper.map_resource_fields(db_resource)
         assert result == expected
 
-    def test_map_resource_fields_btaa_fields(self):
-        """Test mapping of BTAA-specific fields."""
-        # Database response with BTAA fields
+    def test_map_resource_fields_ogm_fields(self):
+        """Test mapping of OGM-specific fields."""
+        # Database response with OGM fields
         db_resource = {
             "id": "test-123",
             "b1g_code_s": "TEST001",
@@ -83,7 +83,7 @@ class TestOGMFieldMapper:
             "b1g_admintags_sm": ["tag1", "tag2"],
         }
 
-        # Expected result with proper BTAA field names
+        # Expected result with proper OGM field names
         expected = {
             "id": "test-123",
             "b1g_code_s": "TEST001",
@@ -111,7 +111,7 @@ class TestOGMFieldMapper:
         assert result == expected
 
     def test_map_resource_fields_mixed_fields(self):
-        """Test mapping with both standard and BTAA fields."""
+        """Test mapping with both standard and OGM fields."""
         db_resource = {
             "id": "test-123",
             "dct_title_s": "Test Title",

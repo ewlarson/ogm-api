@@ -3,7 +3,7 @@
 """Sync old-production legacy references, downloads, and assets into the API DB.
 
 This migration fills the gaps left by the old `kithe_to_resources_bridge` materialized
-view for curated BTAA-GIN datasets. In old production, critical download/PMTiles
+view for curated legacy GIN datasets. In old production, critical download/PMTiles
 references often live on child Kithe asset rows rather than in the parent
 `json_attributes['dct_references_s']` blob or `document_distributions`.
 
@@ -83,7 +83,7 @@ def get_new_engine() -> Engine:
     db_password = get_env("DB_PASSWORD", "postgres")
     db_host = get_env("DB_HOST", "localhost")
     db_port = get_env("DB_PORT", "2345")
-    db_name = get_env("DB_NAME", "btaa_geospatial_api")
+    db_name = get_env("DB_NAME", "opengeometadata_api")
     url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
     logger.info("Connecting to new database: %s", db_name)
     return create_engine(url)

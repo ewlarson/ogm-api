@@ -50,7 +50,7 @@ RESOURCE_FIELDS = [
     # Identifiers and metadata
     "dct_identifier_sm", "gbl_mdModified_dt", "gbl_mdVersion_s", "gbl_suppressed_b", "gbl_georeferenced_b",
     
-    # BTAA-specific fields
+    # OGM-specific fields
     "b1g_code_s", "b1g_status_s", "b1g_dct_accrualMethod_s", "b1g_dct_accrualPeriodicity_s",
     "b1g_dateAccessioned_s", "b1g_dateAccessioned_sm", "b1g_dateRetired_s", "b1g_child_record_b", 
     "b1g_dct_mediator_sm", "b1g_access_s", "b1g_image_ss", "b1g_geonames_sm", 
@@ -58,12 +58,12 @@ RESOURCE_FIELDS = [
     "b1g_dcat_spatialResolutionInMeters_sm", "b1g_geodcat_spatialResolutionAsText_sm",
     "b1g_dct_provenanceStatement_sm", "b1g_adminTags_sm",
     
-    # Additional BTAA fields for migration
+    # Additional OGM fields for migration
     "b1g_adms_supportedSchema_sm", "b1g_dcat_endpointDescription_s", "b1g_dcat_endpointURL_s",
     "b1g_dcat_inSeries_sm", "b1g_localCollectionLabel_sm", "b1g_prov_softwareAgent_sm",
     "b1g_prov_wasGeneratedBy_sm", "date_created_dtsi", "date_modified_dtsi", "geomg_id_s",
     "publication_state", "import_id",
-    # BTAA latest-schema compatibility fields kept in the bridge view
+    # OGM latest-schema compatibility fields kept in the bridge view
     "b1g_adminNote_sm", "b1g_dateAccessioned_dt", "b1g_dateRetired_dt", "b1g_deprioritized_b",
     "b1g_harvestWorkflow_s", "b1g_isHarvested_b", "b1g_lastHarvested_dt", "b1g_dct_provenance_sm",
     "b1g_dcat_spatialResolutionInMeters_s", "b1g_websitePlatform_s",

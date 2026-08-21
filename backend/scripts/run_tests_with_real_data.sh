@@ -9,11 +9,11 @@ export DB_USER="${DB_USER:-postgres}"
 export DB_PASSWORD="${DB_PASSWORD:-postgres}"
 export DB_HOST="${DB_HOST:-localhost}"
 export DB_PORT="${DB_PORT:-2345}"
-export TEST_DB_NAME="${TEST_DB_NAME:-btaa_ogm_api_test}"
+export TEST_DB_NAME="${TEST_DB_NAME:-opengeometadata_api_test}"
 export DATABASE_URL="postgresql+asyncpg://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$TEST_DB_NAME"
 
 export ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-http://localhost:9200}"
-export ELASTICSEARCH_INDEX="${ELASTICSEARCH_INDEX:-btaa_ogm_api_test}"
+export ELASTICSEARCH_INDEX="${ELASTICSEARCH_INDEX:-opengeometadata_api_test}"
 
 export REDIS_HOST="${REDIS_HOST:-localhost}"
 export REDIS_PORT="${REDIS_PORT:-6379}"

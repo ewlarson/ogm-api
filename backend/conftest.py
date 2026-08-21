@@ -71,7 +71,7 @@ if postgres_password and os.getenv("DATABASE_URL"):
 
 # Configure tests to piggy-back on primary Docker services with isolated test DB/indices
 # Default to the main compose ports (ParadeDB 2345, ES 9200, Redis 6379)
-TEST_DB_NAME = os.getenv("TEST_DB_NAME", "btaa_geospatial_api_test")
+TEST_DB_NAME = os.getenv("TEST_DB_NAME", "opengeometadata_api_test")
 DB_USER = os.getenv("DB_USER", "postgres")
 # Check POSTGRES_PASSWORD first (from .env), then DB_PASSWORD, then default to "postgres"
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD") or os.getenv("DB_PASSWORD", "postgres")
@@ -90,8 +90,8 @@ if not is_docker and DATABASE_URL:
     parsed = urlparse(DATABASE_URL)
     docker_hostnames = [
         "paradedb",
-        "btaa-geospatial-api-paradedb",
-        "btaa-geospatial-api-paradedb-1",
+        "opengeometadata-api-paradedb",
+        "opengeometadata-api-paradedb-1",
     ]
     if parsed.hostname in docker_hostnames:
         # Replace Docker hostname with localhost and use port 2345 (Docker mapped port)
@@ -127,7 +127,7 @@ _HB_CURRENT_WHEN: str | None = None
 _HB_STOP = threading.Event()
 _HB_THREAD: threading.Thread | None = None
 _HB_PATH: Path | None = None
-SKIP_TEST_DATABASE = os.getenv("BTAA_SKIP_TEST_DB", "").strip().lower() in {
+SKIP_TEST_DATABASE = os.getenv("OGM_SKIP_TEST_DB", "").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -228,7 +228,7 @@ def pytest_configure(config):
         "localhost",
         "127.0.0.1",
         "elasticsearch",
-        "btaa-geospatial-api-elasticsearch",
+        "opengeometadata-api-elasticsearch",
         "http://localhost:9200",
         "http://127.0.0.1:9200",
     )
@@ -239,9 +239,9 @@ def pytest_configure(config):
         )
 
     # Force a test-specific index name unless explicitly overridden to another *_test index.
-    es_index = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api_test")
+    es_index = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api_test")
     if not es_index.endswith("_test"):
-        es_index = "btaa_geospatial_api_test"
+        es_index = "opengeometadata_api_test"
     os.environ["ELASTICSEARCH_INDEX"] = es_index
 
     # Isolate Redis usage to a separate logical DB during tests

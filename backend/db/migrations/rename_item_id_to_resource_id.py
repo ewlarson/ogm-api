@@ -17,7 +17,7 @@ def rename_item_id_to_resource_id():
     """Rename item_id columns to resource_id in relevant tables."""
     try:
         # Get database URL from environment and ensure it's synchronous
-        database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@paradedb:5432/btaa_ogm_api")
+        database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@paradedb:5432/opengeometadata_api")
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
         
         # Create engine

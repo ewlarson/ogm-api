@@ -5,7 +5,7 @@ from scripts import backup_elasticsearch as backup
 
 def test_repository_body_builds_s3_settings(monkeypatch):
     monkeypatch.setattr(backup, "REPOSITORY_TYPE", "s3")
-    monkeypatch.setattr(backup, "BACKUP_S3_PREFIX", "btaa-geospatial-api")
+    monkeypatch.setattr(backup, "BACKUP_S3_PREFIX", "opengeometadata-api")
     monkeypatch.setenv("BACKUP_S3_BUCKET", "geoportal-dr")
     monkeypatch.setenv("KAMAL_DEST", "prd")
     monkeypatch.setenv("ELASTICSEARCH_SNAPSHOT_S3_STORAGE_CLASS", "STANDARD_IA")
@@ -17,7 +17,7 @@ def test_repository_body_builds_s3_settings(monkeypatch):
         "type": "s3",
         "settings": {
             "bucket": "geoportal-dr",
-            "base_path": "btaa-geospatial-api/prd/elasticsearch",
+            "base_path": "opengeometadata-api/prd/elasticsearch",
             "client": "default",
             "compress": True,
             "storage_class": "STANDARD_IA",

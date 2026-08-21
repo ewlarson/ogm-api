@@ -190,9 +190,9 @@ gazetteer_wof_names = Table(
     Column("updated_at", TIMESTAMP),
 )
 
-# BTAA gazetteer
-gazetteer_btaa = Table(
-    "gazetteer_btaa",
+# OGM gazetteer
+gazetteer_ogm = Table(
+    "gazetteer_ogm",
     metadata,
     Column("id", Integer, primary_key=True),
     Column("fast_area", String, nullable=False, index=True),

@@ -11,7 +11,7 @@ Bootstraps a shared Kamal deploy account on a remote server by:
   - creating the deploy group and user (default: deploy)
   - adding that user to the docker group
   - seeding /home/<deploy-user>/.ssh/authorized_keys from the current remote SSH user
-  - preparing /var/lib/btaa-geospatial-api for shared bind mounts
+  - preparing /var/lib/opengeometadata-api for shared bind mounts
   - creating an Elasticsearch bind-mount directory with group-write access for GID 0
 
 Options:
@@ -19,7 +19,7 @@ Options:
   --ssh-user USER                      Existing remote SSH user with passwordless sudo
   --ssh-port PORT                      SSH port (default: 22)
   --deploy-user USER                   Shared deploy user to create (default: deploy)
-  --shared-dir PATH                    Shared data directory (default: /var/lib/btaa-geospatial-api)
+  --shared-dir PATH                    Shared data directory (default: /var/lib/opengeometadata-api)
   --seed-remote-authorized-keys PATH   Remote authorized_keys path to copy from
                                        (default: .ssh/authorized_keys)
   -h, --help                           Show this help
@@ -30,7 +30,7 @@ host=""
 ssh_user=""
 ssh_port="22"
 deploy_user="deploy"
-shared_dir="/var/lib/btaa-geospatial-api"
+shared_dir="/var/lib/opengeometadata-api"
 seed_remote_authorized_keys=".ssh/authorized_keys"
 
 while (($# > 0)); do

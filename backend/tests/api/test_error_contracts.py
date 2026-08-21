@@ -245,7 +245,7 @@ def test_openapi_documents_public_success_and_error_schemas():
         ("/api/v1/map/h3", "get"): "#/components/schemas/MapH3Response",
         ("/api/v1/ogc/collections", "get"): "#/components/schemas/OGCCollectionsResponse",
         (
-            "/api/v1/ogc/collections/btaa-records/items",
+            "/api/v1/ogc/collections/ogm-records/items",
             "get",
         ): "#/components/schemas/OGCFeatureCollectionResponse",
         ("/api/v1/ogm/repos", "get"): "#/components/schemas/OGMRepoSummariesResponse",

@@ -31,7 +31,7 @@ record described by `repository_transfer.md`.
 
 The rehearsal populated a new bare repository only from the locally fetched
 `refs/remotes/origin/*` branches after those refs were compared to live GitHub.
-BTAA remote refs and locally fetched BTAA tags were excluded. The temporary
+Upstream remote refs and locally fetched upstream tags were excluded. The temporary
 mirror was rewritten with:
 
 ```bash
@@ -101,7 +101,7 @@ corrected to preserve the original relative directory sources `esdata`,
 
 The same preflight confirmed that OpenGeoMetadata permits Actions for all
 repositories, standard hosted runners are enabled, no repository in the
-organization occupies the BTAA fork network, and the personal GHCR package is
+organization occupies the upstream fork network, and the personal GHCR package is
 private, remains personal-account scoped, and is not linked to this repository.
 A current logical PostgreSQL dump completed successfully, its permissions were
 restricted to the deployment user, and `pg_restore --list` validated its

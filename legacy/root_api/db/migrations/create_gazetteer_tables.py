@@ -160,9 +160,9 @@ def create_gazetteer_tables():
             Column("updated_at", Date),
         )
 
-        # Define the gazetteer_btaa table
-        gazetteer_btaa = Table(
-            "gazetteer_btaa",
+        # Define the gazetteer_ogm table
+        gazetteer_ogm = Table(
+            "gazetteer_ogm",
             metadata,
             Column("id", Integer, primary_key=True),
             Column("fast_area", String, nullable=False, index=True),
@@ -186,7 +186,7 @@ def create_gazetteer_tables():
             ("gazetteer_wof_concordances", gazetteer_wof_concordances),
             ("gazetteer_wof_geojson", gazetteer_wof_geojson),
             ("gazetteer_wof_names", gazetteer_wof_names),
-            ("gazetteer_btaa", gazetteer_btaa),
+            ("gazetteer_ogm", gazetteer_ogm),
         ]
 
         # Create tables and indexes
@@ -199,16 +199,16 @@ def create_gazetteer_tables():
 
         # Create additional indexes
         with engine.connect() as conn:
-            # Add compound index for state_abbv and namelsad on gazetteer_btaa
-            if not inspector.has_index("gazetteer_btaa", "idx_state_abbv_namelsad"):
+            # Add compound index for state_abbv and namelsad on gazetteer_ogm
+            if not inspector.has_index("gazetteer_ogm", "idx_state_abbv_namelsad"):
                 conn.execute(
                     text(
                         """
-                    CREATE INDEX idx_state_abbv_namelsad ON gazetteer_btaa(state_abbv, namelsad);
+                    CREATE INDEX idx_state_abbv_namelsad ON gazetteer_ogm(state_abbv, namelsad);
                 """
                     )
                 )
-                logger.info("Created compound index on gazetteer_btaa(state_abbv, namelsad)")
+                logger.info("Created compound index on gazetteer_ogm(state_abbv, namelsad)")
 
             # Add additional indexes for optimized querying
             conn.execute(

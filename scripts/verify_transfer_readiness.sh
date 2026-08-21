@@ -115,11 +115,11 @@ else
     fail "$workflow_permission_failures GitHub workflow(s) lack explicit read-only contents permission"
 fi
 
-if grep -Eq '^GEOBTAA_API_LAST_IMPORT_COMMIT=[0-9a-f]{40}$' config/geobtaa-backend-source.env \
-    && grep -Eq '^GEOBTAA_API_LAST_BACKEND_SPLIT_COMMIT=[0-9a-f]{40}$' config/geobtaa-backend-source.env; then
-    pass 'BTAA subtree provenance is pinned to immutable commits'
+if grep -Eq '^UPSTREAM_API_LAST_IMPORT_COMMIT=[0-9a-f]{40}$' config/upstream-backend-source.env \
+    && grep -Eq '^UPSTREAM_API_LAST_BACKEND_SPLIT_COMMIT=[0-9a-f]{40}$' config/upstream-backend-source.env; then
+    pass 'Upstream subtree provenance is pinned to immutable commits'
 else
-    fail 'BTAA subtree provenance is pinned to immutable commits'
+    fail 'Upstream subtree provenance is pinned to immutable commits'
 fi
 
 if [ "$mode" = "full-history" ]; then

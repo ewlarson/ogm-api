@@ -30,7 +30,7 @@ class TestRateLimitService:
     async def test_check_rate_limit_unlimited_tier(self, rate_limit_service):
         """Test that unlimited tiers always allow requests."""
         allowed, remaining, reset_time = await rate_limit_service.check_rate_limit(
-            "btaa_primary", "test_identifier", None
+            "ogm_primary", "test_identifier", None
         )
         assert allowed is True
         assert remaining == -1  # -1 indicates unlimited
@@ -89,7 +89,7 @@ class TestRateLimitService:
     async def test_get_rate_limit_headers_unlimited(self, rate_limit_service):
         """Test rate limit headers for unlimited tier."""
         headers = await rate_limit_service.get_rate_limit_headers(
-            "btaa_primary", "test_identifier", None
+            "ogm_primary", "test_identifier", None
         )
 
         assert headers["X-RateLimit-Limit"] == "unlimited"

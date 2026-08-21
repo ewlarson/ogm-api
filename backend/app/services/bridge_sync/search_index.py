@@ -117,7 +117,7 @@ async def index_changed_resources(resource_ids: Iterable[str]) -> dict[str, Any]
     if not database.is_connected:
         await database.connect()
 
-    index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+    index_name = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
     batch_size = _refresh_batch_size()
     batches = 0
     indexed = 0

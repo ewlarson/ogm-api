@@ -8,16 +8,16 @@ from scripts import backup_postgres_to_s3 as backup
 def test_normalize_database_url_strips_async_driver():
     assert (
         backup._normalize_database_url(
-            "postgresql+asyncpg://postgres:secret@paradedb:5432/btaa_geospatial_api"
+            "postgresql+asyncpg://postgres:secret@paradedb:5432/opengeometadata_api"
         )
-        == "postgresql://postgres:secret@paradedb:5432/btaa_geospatial_api"
+        == "postgresql://postgres:secret@paradedb:5432/opengeometadata_api"
     )
 
 
 def test_s3_key_joins_and_strips_slashes():
     assert (
-        backup._s3_key("/btaa-geospatial-api/", "prd", "/postgres/", "dump.dump")
-        == "btaa-geospatial-api/prd/postgres/dump.dump"
+        backup._s3_key("/opengeometadata-api/", "prd", "/postgres/", "dump.dump")
+        == "opengeometadata-api/prd/postgres/dump.dump"
     )
 
 
@@ -25,14 +25,14 @@ def test_pg_connection_args_keep_password_out_of_args(monkeypatch):
     monkeypatch.setenv("EXISTING_ENV", "kept")
 
     connection = backup._pg_connection_args(
-        "postgresql://postgres:p%40ss@paradedb:5432/btaa_geospatial_api"
+        "postgresql://postgres:p%40ss@paradedb:5432/opengeometadata_api"
     )
 
     assert connection.args == [
         "--host",
         "paradedb",
         "--dbname",
-        "btaa_geospatial_api",
+        "opengeometadata_api",
         "--port",
         "5432",
         "--username",
@@ -65,7 +65,7 @@ def test_prune_old_backups_keeps_newest_count(monkeypatch, tmp_path: Path):
     config = backup.BackupConfig(
         destination="prd",
         bucket="bucket",
-        prefix="btaa-geospatial-api",
+        prefix="opengeometadata-api",
         retention_count=3,
         database_url="postgresql://postgres:secret@db/example",
         work_dir=tmp_path,

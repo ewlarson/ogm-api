@@ -10,8 +10,8 @@ from sqlalchemy import and_, func, or_, select
 from app.services.cache_service import cached_endpoint
 from db.database import database
 from db.models import (
-    gazetteer_btaa,
     gazetteer_geonames,
+    gazetteer_ogm,
     gazetteer_wof_ancestors,
     gazetteer_wof_concordances,
     gazetteer_wof_geojson,
@@ -43,7 +43,7 @@ async def list_gazetteers():
             select(func.count()).select_from(gazetteer_wof_spr)
         )
 
-        btaa_count = await database.fetch_val(select(func.count()).select_from(gazetteer_btaa))
+        ogm_count = await database.fetch_val(select(func.count()).select_from(gazetteer_ogm))
 
         # Additional WOF table counts
         wof_ancestors_count = await database.fetch_val(
@@ -91,19 +91,19 @@ async def list_gazetteers():
                     },
                 },
                 {
-                    "id": "btaa",
+                    "id": "ogm",
                     "type": "gazetteer",
                     "attributes": {
-                        "name": "BTAA",
-                        "description": "Big Ten Academic Alliance Geoportal gazetteer",
-                        "record_count": btaa_count or 0,
-                        "website": "https://geo.btaa.org/",
+                        "name": "OGM",
+                        "description": "OpenGeoMetadata API gazetteer",
+                        "record_count": ogm_count or 0,
+                        "website": "https://opengeometadata.org/",
                     },
                 },
             ],
             "meta": {
                 "total_gazetteers": 3,
-                "total_records": (geonames_count or 0) + (wof_spr_count or 0) + (btaa_count or 0),
+                "total_records": (geonames_count or 0) + (wof_spr_count or 0) + (ogm_count or 0),
             },
         }
     except Exception as e:
@@ -613,9 +613,9 @@ async def get_wof_details(wok_id: int):
         raise HTTPException(status_code=500, detail=f"Error getting WOF details: {str(e)}") from e
 
 
-@router.get("/gazetteers/btaa")
+@router.get("/gazetteers/ogm")
 @cached_endpoint(ttl=GAZETTEER_CACHE_TTL)
-async def search_btaa(
+async def search_ogm(
     q: Optional[str] = None,
     fast_area: Optional[str] = None,
     state_abbv: Optional[str] = None,
@@ -624,7 +624,7 @@ async def search_btaa(
     limit: int = 20,
 ):
     """
-    Search BTAA gazetteer.
+    Search OGM gazetteer.
 
     Parameters:
     - q: General search query (searches fast_area, state_name, and namelsad)
@@ -636,7 +636,7 @@ async def search_btaa(
     """
     try:
         # Build query
-        query = select(gazetteer_btaa)
+        query = select(gazetteer_ogm)
 
         # Apply filters
         conditions = []
@@ -646,20 +646,20 @@ async def search_btaa(
             search_term = f"%{q}%"
             conditions.append(
                 or_(
-                    gazetteer_btaa.c.fast_area.ilike(search_term),
-                    gazetteer_btaa.c.state_name.ilike(search_term),
-                    gazetteer_btaa.c.namelsad.ilike(search_term),
+                    gazetteer_ogm.c.fast_area.ilike(search_term),
+                    gazetteer_ogm.c.state_name.ilike(search_term),
+                    gazetteer_ogm.c.namelsad.ilike(search_term),
                 )
             )
 
         if fast_area:
-            conditions.append(gazetteer_btaa.c.fast_area == fast_area)
+            conditions.append(gazetteer_ogm.c.fast_area == fast_area)
 
         if state_abbv:
-            conditions.append(gazetteer_btaa.c.state_abbv == state_abbv.upper())
+            conditions.append(gazetteer_ogm.c.state_abbv == state_abbv.upper())
 
         if county_fips:
-            conditions.append(gazetteer_btaa.c.county_fips == county_fips)
+            conditions.append(gazetteer_ogm.c.county_fips == county_fips)
 
         # Apply conditions to query
         if conditions:
@@ -667,7 +667,7 @@ async def search_btaa(
 
         # Apply pagination and ordering
         query = (
-            query.order_by(gazetteer_btaa.c.state_abbv, gazetteer_btaa.c.fast_area)
+            query.order_by(gazetteer_ogm.c.state_abbv, gazetteer_ogm.c.fast_area)
             .offset(offset)
             .limit(limit)
         )
@@ -676,7 +676,7 @@ async def search_btaa(
         results = await database.fetch_all(query)
 
         # Get total count for pagination
-        count_query = select(func.count()).select_from(gazetteer_btaa)
+        count_query = select(func.count()).select_from(gazetteer_ogm)
         if conditions:
             count_query = count_query.where(and_(*conditions))
 
@@ -689,7 +689,7 @@ async def search_btaa(
             formatted_results.append(
                 {
                     "id": str(record["id"]),
-                    "type": "btaa",
+                    "type": "ogm",
                     "attributes": {
                         "fast_area": record["fast_area"],
                         "bounding_box": record["bounding_box"],
@@ -720,8 +720,8 @@ async def search_btaa(
         }
 
     except Exception as e:
-        logger.error(f"Error searching BTAA: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error searching BTAA: {str(e)}") from e
+        logger.error(f"Error searching OGM: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error searching OGM: {str(e)}") from e
 
 
 @router.get("/gazetteers/search")
@@ -729,10 +729,10 @@ async def search_btaa(
 async def search_all_gazetteers(
     q: str = Query(..., description="Search query"),
     gazetteer: Optional[str] = Query(
-        None, description="Specific gazetteer to search (geonames, wof, btaa, or all)"
+        None, description="Specific gazetteer to search (geonames, wof, ogm, or all)"
     ),
     country_code: Optional[str] = Query(None, description="Two-letter country code"),
-    state_abbv: Optional[str] = Query(None, description="Two-letter state abbreviation (for BTAA)"),
+    state_abbv: Optional[str] = Query(None, description="Two-letter state abbreviation (for OGM)"),
     offset: int = Query(0, description="Result offset for pagination"),
     limit: int = Query(20, description="Maximum number of results to return"),
 ):
@@ -741,9 +741,9 @@ async def search_all_gazetteers(
 
     Parameters:
     - q: Search query (required)
-    - gazetteer: Specific gazetteer to search (geonames, wof, btaa, or all)
+    - gazetteer: Specific gazetteer to search (geonames, wof, ogm, or all)
     - country_code: Two-letter country code (for GeoNames and WOF)
-    - state_abbv: Two-letter state abbreviation (for BTAA)
+    - state_abbv: Two-letter state abbreviation (for OGM)
     - offset: Result offset for pagination
     - limit: Maximum number of results to return
     """
@@ -754,7 +754,7 @@ async def search_all_gazetteers(
         # Determine which gazetteers to search
         gazetteers_to_search = []
         if not gazetteer or gazetteer.lower() == "all":
-            gazetteers_to_search = ["geonames", "wof", "btaa"]
+            gazetteers_to_search = ["geonames", "wof", "ogm"]
         else:
             gazetteers_to_search = [gazetteer.lower()]
 
@@ -782,16 +782,16 @@ async def search_all_gazetteers(
             results.extend(wof_results["data"])
             total_count += wof_results["meta"]["total_count"]
 
-        # Search BTAA
-        if "btaa" in gazetteers_to_search:
-            btaa_results = await search_btaa(q=q, state_abbv=state_abbv, offset=offset, limit=limit)
+        # Search OGM
+        if "ogm" in gazetteers_to_search:
+            ogm_results = await search_ogm(q=q, state_abbv=state_abbv, offset=offset, limit=limit)
 
             # Add source to each result
-            for result in btaa_results["data"]:
-                result["source"] = "btaa"
+            for result in ogm_results["data"]:
+                result["source"] = "ogm"
 
-            results.extend(btaa_results["data"])
-            total_count += btaa_results["meta"]["total_count"]
+            results.extend(ogm_results["data"])
+            total_count += ogm_results["meta"]["total_count"]
 
         return {
             "data": results[:limit],  # Limit results

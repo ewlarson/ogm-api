@@ -20,10 +20,10 @@ class APIUsageLogService:
             "client_instance": 100,
         }
         client_properties = {
-            "client_name": request.headers.get("X-BTAA-Client-Name"),
-            "client_version": request.headers.get("X-BTAA-Client-Version"),
-            "client_channel": request.headers.get("X-BTAA-Client-Channel"),
-            "client_instance": request.headers.get("X-BTAA-Client-Instance"),
+            "client_name": request.headers.get("X-OGM-Client-Name"),
+            "client_version": request.headers.get("X-OGM-Client-Version"),
+            "client_channel": request.headers.get("X-OGM-Client-Channel"),
+            "client_instance": request.headers.get("X-OGM-Client-Instance"),
         }
         return {
             key: value[: max_lengths[key]]

@@ -33,7 +33,7 @@ load_dotenv()
 
 # Use ELASTICSEARCH_URL from environment or default
 ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
-INDEX_NAME = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+INDEX_NAME = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
 
 # Snapshot repository configuration. The historical default is a filesystem
 # repository; production can switch to an S3 repository through environment.
@@ -41,7 +41,7 @@ REPOSITORY_NAME = os.getenv("ELASTICSEARCH_SNAPSHOT_REPOSITORY", "backup_reposit
 REPOSITORY_TYPE = os.getenv("ELASTICSEARCH_SNAPSHOT_REPOSITORY_TYPE", "fs").strip().lower()
 REPOSITORY_PATH = os.getenv("ELASTICSEARCH_SNAPSHOT_PATH", "/usr/share/elasticsearch/backups")
 BACKUP_REQUIRED_DEST = os.getenv("BACKUP_REQUIRED_DEST", "prd").strip()
-BACKUP_S3_PREFIX = os.getenv("BACKUP_S3_PREFIX", "btaa-geospatial-api").strip("/")
+BACKUP_S3_PREFIX = os.getenv("BACKUP_S3_PREFIX", "opengeometadata-api").strip("/")
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

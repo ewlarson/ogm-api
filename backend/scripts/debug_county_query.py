@@ -19,7 +19,7 @@ async def debug_county_query():
     """Debug the county query to see why we're getting so few results."""
 
     # Database connection
-    DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_ogm_api"
+    DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api"
     engine = create_async_engine(DATABASE_URL)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

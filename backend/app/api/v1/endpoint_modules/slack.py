@@ -15,7 +15,7 @@ router = APIRouter()
 async def slack_info():
     return JSONResponse(
         content={
-            "name": "BTAA Geoportal Slackbot",
+            "name": "OpenGeoMetadata API Slackbot",
             "command_endpoint": "/api/v1/slack/commands",
             "configured": bool(os.getenv("SLACK_SIGNING_SECRET")),
         }

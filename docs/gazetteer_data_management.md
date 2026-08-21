@@ -9,7 +9,7 @@ The gazetteer data management system consists of two main components:
 2. Importers - Scripts to load the prepared data into the database
 
 Currently supported gazetteers:
-- BTAA Placenames
+- OGM Placenames
 - GeoNames
 - OCLC FAST Geographic (FAST)
 - Who's on First (WOF)
@@ -32,7 +32,7 @@ data/
     wof/              # Who's on First data
       csv/            # Exported CSV files
     geonames/         # GeoNames data
-    btaa/             # BTAA Geoportal data
+    ogm/             # OpenGeoMetadata API data
     fast/             # OCLC FAST Geographic data
 ```
 
@@ -55,13 +55,13 @@ cd backend && python app/gazetteer/download.py --gazetteers [gazetteer_name]
 Where `[gazetteer_name]` can be:
 - `wof` - Who's on First
 - `geonames` - GeoNames
-- `btaa` - BTAA Geoportal
+- `ogm` - OpenGeoMetadata API
 - `fast` - FAST (Faceted Application of Subject Terminology)
 
 ### Gazetteer-Specific Notes
 
-#### BTAA Geoportal
-1. Downloads BTAA Geoportal data
+#### OpenGeoMetadata API
+1. Downloads OpenGeoMetadata API data
 2. Processes it into the required format
 
 #### GeoNames
@@ -103,7 +103,7 @@ python app/gazetteer/import_all.py --gazetteers [gazetteer_name]
 Where `[gazetteer_name]` can be:
 - `wof` - Who's on First
 - `geonames` - GeoNames
-- `btaa` - BTAA Geoportal
+- `ogm` - OpenGeoMetadata API
 - `fast` - FAST (Faceted Application of Subject Terminology)
 
 ### Import Process
@@ -126,9 +126,9 @@ For each gazetteer:
 - Processes tab-delimited text files
 - Handles specific GeoNames field formats and data types
 
-#### BTAA Geoportal
+#### OpenGeoMetadata API
 - Uses a chunk size of 2000 for optimal performance
-- Handles BTAA-specific data formats and fields
+- Handles OGM-specific data formats and fields
 
 #### FAST (Faceted Application of Subject Terminology)
 - Parses the MARCXML file using a SAX parser for efficient memory usage

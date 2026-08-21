@@ -54,7 +54,7 @@ class TestShapefileEndpointsSimple:
         """Test that DuckDB path is properly configured."""
         import os
 
-        expected_path = os.getenv("DUCKDB_DATABASE_PATH", "data/duckdb/btaa_ogm_api.duckdb")
+        expected_path = os.getenv("DUCKDB_DATABASE_PATH", "data/duckdb/ogm_ogm_api.duckdb")
         assert DUCKDB_DATABASE_PATH == expected_path
 
     def test_endpoint_paths(self):

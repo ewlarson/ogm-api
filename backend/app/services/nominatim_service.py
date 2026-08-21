@@ -20,7 +20,7 @@ NOMINATIM_SEARCH_URL = os.getenv(
 )
 NOMINATIM_USER_AGENT = os.getenv(
     "NOMINATIM_USER_AGENT",
-    "BTAA-Geoportal/1.0 (+https://geo.btaa.org)",
+    "OpenGeoMetadata/1.0 (+https://opengeometadata.org)",
 )
 NOMINATIM_TIMEOUT_SECONDS = float(os.getenv("NOMINATIM_TIMEOUT_SECONDS", "10"))
 NOMINATIM_HARD_MAX_LIMIT = 5

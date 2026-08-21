@@ -34,7 +34,7 @@ def test_tile_server_connectivity():
 
     try:
         req = urllib.request.Request(test_url)
-        req.add_header("User-Agent", "BTAA-Geospatial-API/1.0")
+        req.add_header("User-Agent", "OGM-Geospatial-API/1.0")
         with urllib.request.urlopen(req, timeout=10) as response:
             status = response.getcode()
             content_length = len(response.read())

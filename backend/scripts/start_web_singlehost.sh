@@ -44,37 +44,37 @@ echo "[start_web_singlehost] configuring nginx SSR upstream for ${WEB_SSR_WORKER
 } > /etc/nginx/ssr-upstream.conf
 
 echo "[start_web_singlehost] configuring nginx frontend API key map"
-if [ -n "${BTAA_GEOSPATIAL_API_KEY:-}" ]; then
-  ESCAPED_API_KEY="$(printf '%s' "${BTAA_GEOSPATIAL_API_KEY}" | sed 's/[$\\"]/\\&/g')"
+if [ -n "${OPENGEOMETADATA_API_KEY:-}" ]; then
+  ESCAPED_API_KEY="$(printf '%s' "${OPENGEOMETADATA_API_KEY}" | sed 's/[$\\"]/\\&/g')"
   {
-    echo "map \$http_x_api_key \$btaa_search_results_api_key {"
+    echo "map \$http_x_api_key \$ogm_search_results_api_key {"
     echo "    default \$http_x_api_key;"
     printf '    "" "%s";\n' "${ESCAPED_API_KEY}"
     echo "}"
     echo
-    echo "map \$http_x_api_key \$btaa_search_results_turnstile_gate {"
+    echo "map \$http_x_api_key \$ogm_search_results_turnstile_gate {"
     echo '    default "";'
     echo '    "" "frontend-search";'
     echo "}"
     echo
-    echo "map \$http_x_api_key \$btaa_search_results_client_channel {"
+    echo "map \$http_x_api_key \$ogm_search_results_client_channel {"
     echo '    default "";'
     echo '    "" "browser";'
     echo "}"
   } > /etc/nginx/frontend-api-key-map.conf
 else
   {
-    echo "map \$http_x_api_key \$btaa_search_results_api_key {"
+    echo "map \$http_x_api_key \$ogm_search_results_api_key {"
     echo "    default \$http_x_api_key;"
     echo '    "" "";'
     echo "}"
     echo
-    echo "map \$http_x_api_key \$btaa_search_results_turnstile_gate {"
+    echo "map \$http_x_api_key \$ogm_search_results_turnstile_gate {"
     echo '    default "";'
     echo '    "" "frontend-search";'
     echo "}"
     echo
-    echo "map \$http_x_api_key \$btaa_search_results_client_channel {"
+    echo "map \$http_x_api_key \$ogm_search_results_client_channel {"
     echo '    default "";'
     echo '    "" "browser";'
     echo "}"

@@ -1,6 +1,6 @@
 # Gazetteer API Documentation
 
-The OpenGeoMetadata API provides access to multiple gazetteers (GeoNames, Who's on First, BTAA, and FAST) through a unified API. This document describes the available endpoints and how to use them.
+The OpenGeoMetadata API provides access to multiple gazetteers (GeoNames, Who's on First, OGM, and FAST) through a unified API. This document describes the available endpoints and how to use them.
 
 ## Overview
 
@@ -10,7 +10,7 @@ The API provides the following gazetteer endpoints:
 - **Search GeoNames**: Search the GeoNames gazetteer
 - **Search Who's on First**: Search the Who's on First gazetteer
 - **Get WOF Details**: Get detailed information about a specific Who's on First place
-- **Search BTAA**: Search the BTAA gazetteer
+- **Search OGM**: Search the OGM gazetteer
 - **Unified Search**: Search across all gazetteers with a single query
 
 All endpoints include caching for improved performance. The cache duration can be configured using the `GAZETTEER_CACHE_TTL` environment variable (default: 3600 seconds/1 hour).
@@ -55,13 +55,13 @@ Returns information about all available gazetteers, including record counts.
       }
     },
     {
-      "id": "btaa",
+      "id": "ogm",
       "type": "gazetteer",
       "attributes": {
-        "name": "BTAA",
-        "description": "Big Ten Academic Alliance Geoportal gazetteer",
+        "name": "OGM",
+        "description": "OpenGeoMetadata API gazetteer",
         "record_count": 5000,
-        "website": "https://geo.btaa.org/"
+        "website": "https://opengeometadata.org/"
       }
     }
   ],
@@ -306,11 +306,11 @@ GET /api/v1/gazetteers/wof/85977539
 }
 ```
 
-### Search BTAA
+### Search OGM
 
-**Endpoint:** `GET /api/v1/gazetteers/btaa`
+**Endpoint:** `GET /api/v1/gazetteers/ogm`
 
-Search for places in the BTAA gazetteer.
+Search for places in the OGM gazetteer.
 
 **Parameters:**
 
@@ -326,7 +326,7 @@ Search for places in the BTAA gazetteer.
 **Example Request:**
 
 ```
-GET /api/v1/gazetteers/btaa?q=minnesota&limit=5
+GET /api/v1/gazetteers/ogm?q=minnesota&limit=5
 ```
 
 **Example Response:**
@@ -336,7 +336,7 @@ GET /api/v1/gazetteers/btaa?q=minnesota&limit=5
   "data": [
     {
       "id": "1",
-      "type": "btaa",
+      "type": "ogm",
       "attributes": {
         "fast_area": "Minnesota",
         "bounding_box": "-97.23,43.50,-89.53,49.38",
@@ -376,9 +376,9 @@ Search across all gazetteers with a single query.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | q | string | Search query (required) |
-| gazetteer | string | Specific gazetteer to search (geonames, wof, btaa, or all) |
+| gazetteer | string | Specific gazetteer to search (geonames, wof, ogm, or all) |
 | country_code | string | Two-letter country code (for GeoNames and WOF) |
-| state_abbv | string | Two-letter state abbreviation (for BTAA) |
+| state_abbv | string | Two-letter state abbreviation (for OGM) |
 | offset | integer | Result offset for pagination (default: 0) |
 | limit | integer | Maximum number of results to return (default: 20) |
 
@@ -426,8 +426,8 @@ GET /api/v1/gazetteers/search?q=chicago&limit=5
     },
     {
       "id": "123",
-      "type": "btaa",
-      "source": "btaa",
+      "type": "ogm",
+      "source": "ogm",
       "attributes": {
         "fast_area": "Chicago",
         "state_abbv": "IL",
@@ -447,7 +447,7 @@ GET /api/v1/gazetteers/search?q=chicago&limit=5
       "gazetteer": null,
       "country_code": null,
       "state_abbv": null,
-      "gazetteers_searched": ["geonames", "wof", "btaa"]
+      "gazetteers_searched": ["geonames", "wof", "ogm"]
     }
   }
 }
@@ -517,7 +517,7 @@ data/
         *.csv
       names/
         *.csv
-    btaa/
+    ogm/
       *.csv
 ```
 

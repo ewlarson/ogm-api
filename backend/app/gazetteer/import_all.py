@@ -5,7 +5,7 @@ Import all gazetteer data.
 This script runs all the gazetteer importers in sequence.
 - GeoNames: Imports data from tab-delimited .txt files
 - WOF: Imports data from .csv files
-- BTAA: Imports data from .csv files
+- OGM: Imports data from .csv files
 - FAST: Imports data from MARCXML files
 """
 
@@ -21,9 +21,9 @@ from typing import Any, Dict, List, Optional
 # Add parent directory to path to import modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from app.gazetteer.importers.btaa_importer import BtaaImporter
 from app.gazetteer.importers.fast_importer import FastImporter
 from app.gazetteer.importers.geonames_importer import GeonamesImporter
+from app.gazetteer.importers.ogm_importer import OgmImporter
 from app.gazetteer.importers.wof_importer import WofImporter
 
 # Configure logging
@@ -55,7 +55,7 @@ async def import_all(
     Run all gazetteer importers.
 
     Args:
-        gazetteer_types: List of gazetteer types to import ('geonames', 'wof', 'btaa', 'fast').
+        gazetteer_types: List of gazetteer types to import ('geonames', 'wof', 'ogm', 'fast').
                         If None, all gazetteers will be imported.
         data_dir: Base directory for gazetteer data.
                 If None, default directories will be used.
@@ -67,7 +67,7 @@ async def import_all(
 
     # Use all gazetteer types if none specified
     if not gazetteer_types:
-        gazetteer_types = ["geonames", "wof", "btaa", "fast"]
+        gazetteer_types = ["geonames", "wof", "ogm", "fast"]
 
     results = {}
 
@@ -90,9 +90,9 @@ async def import_all(
             logger.info("  - concordances.csv: Concordances to other systems")
             logger.info("  - geojson.csv: GeoJSON data (if available)")
             logger.info("  - names.csv: Alternative names")
-        elif gazetteer_type == "btaa":
-            importer_dir = os.path.join(data_dir, "btaa") if data_dir else None
-            importer = BtaaImporter(data_directory=importer_dir)
+        elif gazetteer_type == "ogm":
+            importer_dir = os.path.join(data_dir, "ogm") if data_dir else None
+            importer = OgmImporter(data_directory=importer_dir)
         elif gazetteer_type == "fast":
             importer_dir = os.path.join(data_dir, "fast") if data_dir else None
             importer = FastImporter(data_directory=importer_dir)
@@ -150,7 +150,7 @@ def parse_args():
     parser.add_argument(
         "--gazetteers",
         nargs="+",
-        choices=["geonames", "wof", "btaa", "fast", "all"],
+        choices=["geonames", "wof", "ogm", "fast", "all"],
         default=["all"],
         help="Gazetteers to import (default: all)",
     )
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     # Convert 'all' to all gazetteer types
     gazetteer_types = []
     if "all" in args.gazetteers:
-        gazetteer_types = ["geonames", "wof", "btaa", "fast"]
+        gazetteer_types = ["geonames", "wof", "ogm", "fast"]
     else:
         gazetteer_types = args.gazetteers
 

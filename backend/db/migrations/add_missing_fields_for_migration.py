@@ -22,7 +22,7 @@ def add_missing_fields_for_migration():
     """
     try:
         # Get database URL from environment and ensure it's synchronous
-        database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_ogm_api")
+        database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api")
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
         
         # Create engine
@@ -37,7 +37,7 @@ def add_missing_fields_for_migration():
         with engine.connect() as conn:
             # List of additional fields to add
             additional_fields = [
-                # BTAA-specific fields found in old database
+                # OGM-specific fields found in old database
                 ("b1g_adms_supportedSchema_sm", "VARCHAR[]"),
                 ("b1g_dateAccessioned_sm", "VARCHAR[]"),  # Array version for migration compatibility
                 ("b1g_dcat_endpointDescription_s", "VARCHAR"),

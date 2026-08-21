@@ -721,10 +721,8 @@ class OGMMCPService:
 
     def _public_api_base(self) -> str:
         """Resolve base URL for calling this API over HTTP."""
-        base = (
-            os.getenv("OPENGEOMETADATA_API_BASE_URL")
-            or os.getenv("BTAA_GEOSPATIAL_API_BASE_URL")
-            or os.getenv("APPLICATION_URL", "http://localhost:8000")
+        base = os.getenv("OPENGEOMETADATA_API_BASE_URL") or os.getenv(
+            "APPLICATION_URL", "http://localhost:8000"
         )
         base = base.rstrip("/")
         if base.endswith("/api/v1"):
@@ -741,7 +739,7 @@ class OGMMCPService:
         url = f"{self._public_api_base()}/api/v1{path}"
         timeout = aiohttp.ClientTimeout(total=30)
         headers = {}
-        api_key = os.getenv("OPENGEOMETADATA_API_KEY") or os.getenv("BTAA_GEOSPATIAL_API_KEY")
+        api_key = os.getenv("OPENGEOMETADATA_API_KEY")
         if api_key:
             headers["X-API-Key"] = api_key
         async with aiohttp.ClientSession(timeout=timeout) as session:

@@ -116,7 +116,7 @@ class OGMImporter:
         """
         self.ogm_path = ogm_path or os.path.join("data", "opengeometadata")
         self.database_url = database_url or os.getenv(
-            "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api"
+            "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api"
         )
         self.batch_size = batch_size
         self.dry_run = dry_run
@@ -269,7 +269,7 @@ class OGMImporter:
                 else:
                     cleaned[key] = str(value) if value else None
 
-            # Handle JSON fields for BTAA-specific data
+            # Handle JSON fields for OGM-specific data
             elif key == "b1g_access_s":
                 if isinstance(value, str):
                     try:

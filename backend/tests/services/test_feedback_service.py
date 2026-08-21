@@ -67,7 +67,7 @@ def test_send_feedback_email_supports_sendmail(monkeypatch):
     }
     assert calls[0]["cmd"] == ["/usr/local/bin/sendmail", "-t", "-i"]
     assert calls[0]["check"] is True
-    assert b"BTAA Geoportal Feedback: Question" in calls[0]["input"]
+    assert b"OpenGeoMetadata API Feedback: Question" in calls[0]["input"]
     assert b"Can this record link to a newer dataset?" in calls[0]["input"]
 
 

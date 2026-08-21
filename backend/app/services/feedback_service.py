@@ -15,7 +15,7 @@ FEEDBACK_TOPICS = {
     "Harmful language",
     "Other",
 }
-DEFAULT_FEEDBACK_RECIPIENTS = "majew030@umn.edu,btaa-gdp@umn.edu,geoportal@btaa.org"
+DEFAULT_FEEDBACK_RECIPIENTS = ""
 
 
 class FeedbackDeliveryUnavailable(RuntimeError):
@@ -64,11 +64,11 @@ def _sender() -> str:
     sender = os.getenv("FEEDBACK_FROM") or os.getenv("SMTP_FROM")
     if sender:
         return sender
-    return formataddr(("BTAA Geoportal", "no-reply@geo.btaa.org"))
+    return formataddr(("OpenGeoMetadata API", "no-reply@ogm.geo4lib.app"))
 
 
 def _subject(topic: str) -> str:
-    prefix = os.getenv("FEEDBACK_SUBJECT_PREFIX", "BTAA Geoportal Feedback")
+    prefix = os.getenv("FEEDBACK_SUBJECT_PREFIX", "OpenGeoMetadata API Feedback")
     return f"{prefix}: {topic}"
 
 
@@ -90,7 +90,7 @@ def _build_message(submission: FeedbackSubmission, recipients: list[str]) -> Ema
     message.set_content(
         "\n".join(
             [
-                "A BTAA Geoportal feedback form was submitted.",
+                "An OpenGeoMetadata API feedback form was submitted.",
                 "",
                 f"Topic: {submission.topic}",
                 f"Name: {submitted_by}",

@@ -115,7 +115,7 @@ KEYWORD_FILTER_FIELDS = {
 }
 
 DIRECT_FILTER_FIELDS = {
-    # BTAA code is mapped as a keyword already, so filters should target the field directly.
+    # OGM code is mapped as a keyword already, so filters should target the field directly.
     "b1g_code_s",
     "b1g_language_sm",
 }
@@ -1147,7 +1147,7 @@ class SearchParams:
             facets=facets,
             adv_q=adv_q,
             hydrate_hits=hydrate_hits,
-            index_name=os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api"),
+            index_name=os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api"),
         )
 
     @property
@@ -2242,7 +2242,7 @@ async def map_h3_aggregation(
     bbox: 'west,south,east,north'. resolution: 2–8.
     Returns {"resolution": int, "hexes": [[h3_str, count], ...], "globalCount": int}.
     """
-    index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+    index_name = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
     if resolution < 2 or resolution > 8:
         resolution = 5
     filter_clauses = []
@@ -2704,7 +2704,7 @@ async def get_facet_values(
         ValueError: If facet_name is invalid
         HTTPException: If Elasticsearch query fails
     """
-    index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+    index_name = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
     overall_start = time.perf_counter()
 
     # Get facet aggregation configuration
@@ -3041,7 +3041,7 @@ async def find_similar_resources(resource_id: str, limit: int = 12) -> list:
     Returns:
         List of resource IDs ordered by similarity score
     """
-    index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api")
+    index_name = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
 
     try:
         # Use HEAD/exists instead of GET so retired database records that are

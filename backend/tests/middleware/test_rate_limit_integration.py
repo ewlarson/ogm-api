@@ -137,8 +137,8 @@ def unlimited_key_client(monkeypatch):
         if api_key == "frontend-server-key":
             return {
                 "tier_id": None,
-                "tier_name": "btaa_primary",
-                "display_name": "BTAA Geoportal Frontend",
+                "tier_name": "ogm_primary",
+                "display_name": "OpenGeoMetadata API Frontend",
                 "requests_per_minute": None,
                 "api_key_id": None,
                 "key_hash": "frontend-server-key-hash",

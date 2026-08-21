@@ -13,16 +13,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def add_latest_btaa_schema_fields():
+def add_latest_ogm_schema_fields():
     """
-    Add latest BTAA schema compatibility fields to the resources table.
+    Add latest OGM schema compatibility fields to the resources table.
 
     This migration is idempotent and safe to re-run.
     """
     try:
         database_url = os.getenv(
             "DATABASE_URL",
-            "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_ogm_api",
+            "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api",
         )
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
 
@@ -30,12 +30,12 @@ def add_latest_btaa_schema_fields():
         inspector = inspect(engine)
 
         if not inspector.has_table("resources"):
-            logger.error("Resources table does not exist. Cannot add latest BTAA fields.")
+            logger.error("Resources table does not exist. Cannot add latest OGM fields.")
             return
 
-        # Field names/types requested for latest BTAA schema support.
+        # Field names/types requested for latest OGM schema support.
         # Mixed-case names are quoted to preserve exact column casing.
-        latest_btaa_fields = [
+        latest_ogm_fields = [
             ("b1g_adminNote_sm", "VARCHAR[]"),
             ("b1g_dateAccessioned_dt", "TIMESTAMP"),
             ("b1g_dateRetired_dt", "TIMESTAMP"),
@@ -49,7 +49,7 @@ def add_latest_btaa_schema_fields():
         ]
 
         with engine.connect() as conn:
-            for field_name, field_type in latest_btaa_fields:
+            for field_name, field_type in latest_ogm_fields:
                 try:
                     conn.execute(
                         text(f'ALTER TABLE resources ADD COLUMN "{field_name}" {field_type}')
@@ -64,12 +64,12 @@ def add_latest_btaa_schema_fields():
                     else:
                         logger.warning(f"Could not add column {field_name}: {e}")
 
-            logger.info("Successfully added latest BTAA schema fields.")
+            logger.info("Successfully added latest OGM schema fields.")
 
     except Exception as e:
-        logger.error(f"Error adding latest BTAA schema fields: {e}")
+        logger.error(f"Error adding latest OGM schema fields: {e}")
         raise
 
 
 if __name__ == "__main__":
-    add_latest_btaa_schema_fields()
+    add_latest_ogm_schema_fields()

@@ -36,7 +36,7 @@ def test_list_gazetteers():
         # Verify gazetteer data structure (without checking specific record counts)
         geonames = next(g for g in data["data"] if g["id"] == "geonames")
         wof = next(g for g in data["data"] if g["id"] == "wof")
-        btaa = next(g for g in data["data"] if g["id"] == "btaa")
+        ogm = next(g for g in data["data"] if g["id"] == "ogm")
 
         assert geonames["attributes"]["name"] == "GeoNames"
         assert "record_count" in geonames["attributes"]
@@ -45,8 +45,8 @@ def test_list_gazetteers():
         assert "record_count" in wof["attributes"]
         assert "additional_tables" in wof["attributes"]
 
-        assert btaa["attributes"]["name"] == "BTAA"
-        assert "record_count" in btaa["attributes"]
+        assert ogm["attributes"]["name"] == "OGM"
+        assert "record_count" in ogm["attributes"]
     else:
         # If the endpoint fails due to database connection issues, that's okay for now
         # The important thing is that the endpoint structure is correct
@@ -97,10 +97,10 @@ def test_search_wof():
         assert response.status_code in [200, 500]  # Allow both success and database errors
 
 
-def test_search_btaa():
-    """Test the search_btaa endpoint structure."""
+def test_search_ogm():
+    """Test the search_ogm endpoint structure."""
     # Call endpoint with query params
-    response = client.get("/api/v1/gazetteers/btaa/search?q=Minnesota&limit=10")
+    response = client.get("/api/v1/gazetteers/ogm/search?q=Minnesota&limit=10")
 
     # For now, just verify the endpoint exists and returns a response
     # The actual database calls may fail in the test environment
@@ -112,7 +112,7 @@ def test_search_btaa():
             assert "type" in data["data"][0]
             assert "id" in data["data"][0]
             assert "attributes" in data["data"][0]
-            assert data["data"][0]["type"] == "btaa"
+            assert data["data"][0]["type"] == "ogm"
     else:
         # If the endpoint fails due to database issues, that's okay for now
         # The important thing is that the endpoint structure is correct
@@ -132,10 +132,10 @@ def test_search_all_gazetteers():
         # The response should contain results from all gazetteers
         assert "geonames" in data
         assert "wof" in data
-        assert "btaa" in data
+        assert "ogm" in data
 
         # Each gazetteer should have a data field
-        for gazetteer in ["geonames", "wof", "btaa"]:
+        for gazetteer in ["geonames", "wof", "ogm"]:
             if data[gazetteer]["data"]:  # If there are results
                 assert "type" in data[gazetteer]["data"][0]
                 assert "id" in data[gazetteer]["data"][0]
@@ -159,7 +159,7 @@ def test_search_specific_gazetteer():
         # Should only return geonames results
         assert "geonames" in data
         assert "wof" not in data
-        assert "btaa" not in data
+        assert "ogm" not in data
 
         # If there are results, verify the structure
         if data["geonames"]["data"]:
@@ -318,7 +318,7 @@ class TestGazetteerEndpointsEnhanced:
         assert "/api/v1/gazetteers/search" in routes
         assert "/api/v1/gazetteers/geonames/search" in routes
         assert "/api/v1/gazetteers/wof/search" in routes
-        assert "/api/v1/gazetteers/btaa/search" in routes
+        assert "/api/v1/gazetteers/ogm/search" in routes
         assert "/api/v1/gazetteers/nominatim/search" in routes
 
     @patch("app.api.v1.endpoint_modules.gazetteer.database")
@@ -349,9 +349,9 @@ class TestGazetteerEndpointsEnhanced:
         assert gazetteers["wof"]["attributes"]["record_count"] == 200
         assert "additional_tables" in gazetteers["wof"]["attributes"]
 
-        assert "btaa" in gazetteers
-        assert gazetteers["btaa"]["attributes"]["name"] == "BTAA"
-        assert gazetteers["btaa"]["attributes"]["record_count"] == 50
+        assert "ogm" in gazetteers
+        assert gazetteers["ogm"]["attributes"]["name"] == "OGM"
+        assert gazetteers["ogm"]["attributes"]["record_count"] == 50
 
     @patch("app.api.v1.endpoint_modules.gazetteer.database")
     def test_list_gazetteers_database_error(self, mock_database):
@@ -418,10 +418,10 @@ class TestGazetteerEndpointsEnhanced:
         if response.status_code == 200:
             assert "geonames" in data
             assert "wof" in data
-            assert "btaa" in data
+            assert "ogm" in data
 
             # Verify each section has the expected structure
-            for gazetteer_name in ["geonames", "wof", "btaa"]:
+            for gazetteer_name in ["geonames", "wof", "ogm"]:
                 gazetteer_data = data[gazetteer_name]
                 assert "data" in gazetteer_data
                 assert isinstance(gazetteer_data["data"], list)
@@ -448,7 +448,7 @@ class TestGazetteerEndpointsEnhanced:
             assert "data" in data
             assert isinstance(data["data"], list)
             assert "wof" not in data
-            assert "btaa" not in data
+            assert "ogm" not in data
 
     def test_search_geonames_success(self):
         """Test successful GeoNames search."""
@@ -522,10 +522,10 @@ class TestGazetteerEndpointsEnhanced:
         )
         assert "Database error" not in response.text
 
-    def test_search_btaa_success(self):
-        """Test successful BTAA search."""
+    def test_search_ogm_success(self):
+        """Test successful OGM search."""
         # Use real data instead of mocks
-        response = client.get("/api/v1/gazetteers/btaa/search?q=test")
+        response = client.get("/api/v1/gazetteers/ogm/search?q=test")
 
         # The endpoint might return 500 due to event loop issues, so check for success or error
         assert response.status_code in [200, 500]
@@ -542,11 +542,11 @@ class TestGazetteerEndpointsEnhanced:
                 assert "attributes" in result
 
     @patch("app.api.v1.endpoint_modules.gazetteer.database")
-    def test_search_btaa_database_error(self, mock_database):
-        """Test BTAA search with database error."""
+    def test_search_ogm_database_error(self, mock_database):
+        """Test OGM search with database error."""
         mock_database.fetch_all.side_effect = Exception("Database error")
 
-        response = client.get("/api/v1/gazetteers/btaa/search?q=test")
+        response = client.get("/api/v1/gazetteers/ogm/search?q=test")
 
         assert response.status_code == 500
         data = response.json()
@@ -598,11 +598,11 @@ class TestGazetteerEndpointsEnhanced:
         assert len(data["data"]) == 0
 
     @patch("app.api.v1.endpoint_modules.gazetteer.database")
-    def test_search_btaa_empty_results(self, mock_database):
-        """Test BTAA search with empty results."""
+    def test_search_ogm_empty_results(self, mock_database):
+        """Test OGM search with empty results."""
         mock_database.fetch_all = AsyncMock(return_value=[])
 
-        response = client.get("/api/v1/gazetteers/btaa/search?q=nonexistent")
+        response = client.get("/api/v1/gazetteers/ogm/search?q=nonexistent")
 
         assert response.status_code == 200
         data = response.json()
@@ -626,7 +626,7 @@ class TestGazetteerEndpointsEnhanced:
         response = client.get("/api/v1/gazetteers/wof/search")
         assert response.status_code == 422
 
-        response = client.get("/api/v1/gazetteers/btaa/search")
+        response = client.get("/api/v1/gazetteers/ogm/search")
         assert response.status_code == 422
 
     def test_gazetteer_search_limit_validation(self):

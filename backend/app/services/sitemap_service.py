@@ -298,7 +298,7 @@ def build_robots_txt(base_url: str | None = None, indexing_enabled: bool | None 
 
     app_url = _application_url(base_url)
     lines = [
-        "# Production robots rules for the BTAA Geoportal.",
+        "# Production robots rules for the OpenGeoMetadata API.",
         "User-agent: *",
         "Allow: /",
         "Disallow: /api/",

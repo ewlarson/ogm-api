@@ -203,12 +203,12 @@ class CitationService:
         if len(creators) > 1:
             author = ", ".join(creators[:-1]) + ", and " + creators[-1]
         title = self.document.get("dct_title_s") or "Untitled"
-        publisher = self._get_apa_publisher() or "Big Ten Academic Alliance Geoportal"
+        publisher = self._get_apa_publisher() or "OpenGeoMetadata API"
         date = self.document.get("dct_issued_s") or "n.d."
         url = self._get_url() or ""
 
         out = f'{author}. "{title}." '
-        out += f"Big Ten Academic Alliance Geoportal, {publisher}, {date}"
+        out += f"OpenGeoMetadata API, {publisher}, {date}"
         if url:
             out += f", {url}"
         out += "."
@@ -222,7 +222,7 @@ class CitationService:
             author = ", ".join(creators[:-1]) + ", and " + creators[-1]
         year = self._extract_year()
         title = self.document.get("dct_title_s") or "Untitled"
-        publisher = self._get_apa_publisher() or "Big Ten Academic Alliance Geoportal"
+        publisher = self._get_apa_publisher() or "OpenGeoMetadata API"
         url = self._get_url() or ""
 
         out = f'{author}. {year}. "{title}." {publisher}.'

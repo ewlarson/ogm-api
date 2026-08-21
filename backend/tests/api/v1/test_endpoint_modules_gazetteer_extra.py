@@ -63,7 +63,7 @@ async def test_search_all_gazetteers_combined(monkeypatch):
 
     monkeypatch.setattr(gaz, "search_geonames", lambda request, q, limit, o: fake_resp("geonames"))
     monkeypatch.setattr(gaz, "search_wof", lambda request, q, limit, o: fake_resp("wof"))
-    monkeypatch.setattr(gaz, "search_btaa", lambda request, q, limit, o: fake_resp("btaa"))
+    monkeypatch.setattr(gaz, "search_ogm", lambda request, q, limit, o: fake_resp("ogm"))
 
     class DummyRequest:
         def __init__(self):
@@ -81,9 +81,9 @@ async def test_search_all_gazetteers_combined(monkeypatch):
     # Function may be cached and return JSONResponse; handle both
     if hasattr(combined, "body"):
         data = json.loads(combined.body)
-        assert set(data.keys()) == {"geonames", "wof", "btaa"}
+        assert set(data.keys()) == {"geonames", "wof", "ogm"}
     else:
-        assert set(combined.keys()) == {"geonames", "wof", "btaa"}
+        assert set(combined.keys()) == {"geonames", "wof", "ogm"}
 
 
 @pytest.mark.asyncio
@@ -167,7 +167,7 @@ async def test_search_wof_success(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_search_btaa_success(monkeypatch):
+async def test_search_ogm_success(monkeypatch):
     from app.api.v1.endpoint_modules import gazetteer as gaz
 
     async def fake_fetch_all(query):
@@ -179,19 +179,19 @@ async def test_search_btaa_success(monkeypatch):
         def __init__(self):
             from starlette.datastructures import URL
 
-            self._url = URL("http://test/gazetteers/btaa/search?q=abc")
+            self._url = URL("http://test/gazetteers/ogm/search?q=abc")
             self.query_params = "q=abc&limit=10&offset=0"
 
         @property
         def url(self):
             return self._url
 
-    resp = await gaz.search_btaa(request=DummyRequest(), q="abc", limit=10, offset=0)
+    resp = await gaz.search_ogm(request=DummyRequest(), q="abc", limit=10, offset=0)
     assert hasattr(resp, "body")
 
 
 @pytest.mark.asyncio
-async def test_search_btaa_error(monkeypatch):
+async def test_search_ogm_error(monkeypatch):
     from fastapi import HTTPException
 
     from app.api.v1.endpoint_modules import gazetteer as gaz
@@ -205,12 +205,12 @@ async def test_search_btaa_error(monkeypatch):
         def __init__(self):
             from starlette.datastructures import URL
 
-            self._url = URL("http://test/gazetteers/btaa/search")
+            self._url = URL("http://test/gazetteers/ogm/search")
 
         @property
         def url(self):
             return self._url
 
     with pytest.raises(HTTPException) as exc:
-        await gaz.search_btaa(request=DummyRequest(), q="x", limit=10, offset=0)
+        await gaz.search_ogm(request=DummyRequest(), q="x", limit=10, offset=0)
     assert exc.value.status_code == 500

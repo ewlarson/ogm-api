@@ -65,7 +65,7 @@ resources = Table(
     Column("gbl_mdVersion_s", String),
     Column("gbl_suppressed_b", Boolean),
     Column("gbl_georeferenced_b", Boolean),
-    # BTAA-specific fields for OGM Aardvark compliance
+    # OGM-specific fields for OGM Aardvark compliance
     Column("b1g_code_s", String),
     Column("b1g_status_s", String),
     Column("b1g_dct_accrualMethod_s", String),
@@ -85,7 +85,7 @@ resources = Table(
     Column("b1g_geodcat_spatialResolutionAsText_sm", ARRAY(String)),
     Column("b1g_dct_provenanceStatement_sm", ARRAY(String)),
     Column("b1g_adminTags_sm", ARRAY(String)),
-    # Latest BTAA schema compatibility fields
+    # Latest OGM schema compatibility fields
     Column("b1g_adminNote_sm", ARRAY(String)),
     Column("b1g_dateAccessioned_dt", TIMESTAMP),
     Column("b1g_dateRetired_dt", TIMESTAMP),
@@ -96,7 +96,7 @@ resources = Table(
     Column("b1g_dct_provenance_sm", ARRAY(String)),
     Column("b1g_dcat_spatialResolutionInMeters_s", String),
     Column("b1g_websitePlatform_s", String),
-    # Additional BTAA fields for old database migration
+    # Additional OGM fields for old database migration
     Column("b1g_adms_supportedSchema_sm", ARRAY(String)),
     Column("b1g_dateAccessioned_sm", ARRAY(String)),  # Note: array version for migration
     Column("b1g_dcat_endpointDescription_s", String),
@@ -238,8 +238,10 @@ gazetteer_wof_names = Table(
     Column("updated_at", TIMESTAMP),
 )
 
-# BTAA gazetteer
-gazetteer_btaa = Table(
+# OGM gazetteer
+gazetteer_ogm = Table(
+    # Keep the populated production table name until a two-release migration
+    # can rename it without creating a rolling-deploy compatibility gap.
     "gazetteer_btaa",
     metadata,
     Column("id", Integer, primary_key=True),

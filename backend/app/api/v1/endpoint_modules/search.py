@@ -204,7 +204,7 @@ def _build_semantic_search_cache_key(
     return CacheService.generate_cache_key(
         SEARCH_RESULT_CACHE_NAMESPACE,
         version=SEARCH_RESULT_CACHE_VERSION,
-        index=os.getenv("ELASTICSEARCH_INDEX", "btaa_geospatial_api"),
+        index=os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api"),
         q=q or "",
         page=page,
         per_page=per_page,

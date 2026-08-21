@@ -86,17 +86,17 @@ async def get_collections(request: Request) -> Dict[str, Any]:
 
 
 @router.get(
-    "/collections/btaa-records",
+    "/collections/ogm-records",
     response_model=OGCCollectionResponse,
     responses=PUBLIC_ERROR_RESPONSES,
 )
 async def get_collection(request: Request) -> Dict[str, Any]:
     url = str(request.url)
-    return OGCResponseProjector.build_collection(url, "btaa-records")
+    return OGCResponseProjector.build_collection(url, "ogm-records")
 
 
 @router.get(
-    "/collections/btaa-records/queryables",
+    "/collections/ogm-records/queryables",
     response_model=OGCQueryablesResponse,
     responses=PUBLIC_ERROR_RESPONSES,
 )
@@ -106,7 +106,7 @@ async def get_queryables(request: Request) -> Dict[str, Any]:
 
 
 @router.get(
-    "/collections/btaa-records/sortables",
+    "/collections/ogm-records/sortables",
     response_model=OGCSortablesResponse,
     responses=PUBLIC_ERROR_RESPONSES,
 )
@@ -116,7 +116,7 @@ async def get_sortables(request: Request) -> Dict[str, Any]:
 
 
 @router.get(
-    "/collections/btaa-records/items",
+    "/collections/ogm-records/items",
     response_model=OGCFeatureCollectionResponse,
     responses=PUBLIC_ERROR_RESPONSES,
 )
@@ -142,7 +142,7 @@ async def get_items(
         limit=limit,
         sort=internal_sort,
         include_filters=include_filters,
-        exclude_filters={},  # Empty dict to avoid parsing query params as BTAA filters
+        exclude_filters={},  # Empty dict to avoid parsing query params as OGM filters
         request_query_params=None,
     )
 
@@ -150,11 +150,11 @@ async def get_items(
         logger.error("OGC search request failed in search service")
         raise HTTPException(status_code=503, detail="Elasticsearch search failed")
 
-    return OGCResponseProjector.build_items_response(url, results, page, limit, "btaa-records")
+    return OGCResponseProjector.build_items_response(url, results, page, limit, "ogm-records")
 
 
 @router.get(
-    "/collections/btaa-records/items/{recordId}",
+    "/collections/ogm-records/items/{recordId}",
     response_model=OGCFeatureResponse,
     responses=PUBLIC_ERROR_RESPONSES,
 )
@@ -179,4 +179,4 @@ async def get_item(
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
 
-    return OGCResponseProjector.build_item(url, resource, "btaa-records")
+    return OGCResponseProjector.build_item(url, resource, "ogm-records")

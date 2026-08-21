@@ -158,7 +158,7 @@ INDEX_MAPPING = {
             "gbl_mdmodified_dt": {"type": "date", "ignore_malformed": True},
             # Legacy references blob retained for compatibility (disabled indexing)
             "dct_references_s": {"type": "object", "enabled": False},
-            # BTAA-specific OGM Aardvark fields
+            # OGM-specific OGM Aardvark fields
             "b1g_code_s": {"type": "keyword"},
             "b1g_status_s": {"type": "keyword"},
             "b1g_dct_accrualMethod_s": {"type": "keyword"},

@@ -96,7 +96,7 @@ def build_backfill_statement():
 def backfill_resources_from_legacy_items():
     """Copy legacy `items` rows into `resources` without touching existing rows."""
     database_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:2345/btaa_ogm_api"
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:2345/opengeometadata_api"
     )
     engine = create_engine(_normalize_database_url(database_url))
     inspector = inspect(engine)

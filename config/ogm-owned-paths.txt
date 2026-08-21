@@ -1,7 +1,7 @@
 # Paths intentionally owned by this OpenGeoMetadata downstream.
 #
 # The upstream backend sync helper protects backend/* entries in this file so
-# the BTAA backend import does not silently erase local branding, deployment,
+# an upstream backend import does not silently erase local branding, deployment,
 # and OGM harvesting behavior. Root-level entries document the wider overlay.
 
 .github/workflows/ogm-nightly-sync.yml

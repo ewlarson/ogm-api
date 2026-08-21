@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 async def index_items():
     """Index all items from PostgreSQL into Elasticsearch."""
-    index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_ogm_api")
+    index_name = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
 
     if await es.indices.exists(index=index_name):
         await es.indices.delete(index=index_name)
@@ -278,7 +278,7 @@ async def perform_bulk_indexing(bulk_data, index_name, bulk_size=100):
 
 async def reindex_items():
     """Reindex all items from PostgreSQL into Elasticsearch with the new mapping."""
-    index_name = os.getenv("ELASTICSEARCH_INDEX", "btaa_geometadata_api")
+    index_name = os.getenv("ELASTICSEARCH_INDEX", "opengeometadata_api")
 
     try:
         # Delete the existing index if it exists

@@ -571,7 +571,7 @@ def create_gazetteer_meta_and_links(
         limit: Number of results per page
         offset: Number of results to skip
         total_count: Total number of results
-        gazetteer_name: Name of the gazetteer (geonames, wof, btaa)
+        gazetteer_name: Name of the gazetteer (geonames, wof, ogm)
         allowed_params: List of allowed parameter names for strong parameters
 
     Returns:

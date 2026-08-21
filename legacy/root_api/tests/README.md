@@ -1,6 +1,6 @@
-# Testing the BTAA Geoportal API
+# Testing the OpenGeoMetadata API API
 
-This directory contains tests for the BTAA Geoportal API. The tests are organized by component and use pytest as the test runner.
+This directory contains tests for the OpenGeoMetadata API API. The tests are organized by component and use pytest as the test runner.
 
 ## Test Structure
 

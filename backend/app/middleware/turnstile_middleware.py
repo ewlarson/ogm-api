@@ -33,9 +33,9 @@ def _path_matches(path: str, protected_path: str) -> bool:
 
 
 def _is_frontend_gate_request(request: Request) -> bool:
-    if request.headers.get("X-BTAA-Turnstile-Gate"):
+    if request.headers.get("X-OGM-Turnstile-Gate"):
         return True
-    if request.headers.get("X-BTAA-Client-Channel", "").lower() == "browser":
+    if request.headers.get("X-OGM-Client-Channel", "").lower() == "browser":
         return True
     return bool(request.headers.get("X-Visit-Token"))
 

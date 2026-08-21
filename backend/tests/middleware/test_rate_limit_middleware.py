@@ -173,8 +173,8 @@ class TestRateLimitMiddleware:
             ("/api/openapi.json", True),
             ("/api/redoc", True),
             ("/static/brand.css", True),
-            ("/static/btaa-logo-white.png", True),
-            ("/static/btaa-gin-white.png", True),
+            ("/static/opengeometadata-bauhaus-logo.svg", True),
+            ("/static/opengeometadata-map-legend-logo-composite.svg", True),
             ("/static/favicon.ico", True),
             ("/api/v1/search", False),
             ("/api/v1/resources", False),
@@ -399,7 +399,7 @@ class TestRateLimitMiddleware:
 
         # Mock tier info (unlimited)
         tier_info = {
-            "tier_name": "btaa_primary",
+            "tier_name": "ogm_primary",
             "requests_per_minute": None,  # Unlimited
             "key_hash": "test_hash",
         }

@@ -45,7 +45,7 @@ def populate_resource_distributions():
     try:
         # Get database URL from environment and ensure it's synchronous
         database_url = os.getenv(
-            "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/btaa_ogm_api"
+            "DATABASE_URL", "postgresql://postgres:postgres@localhost:2345/opengeometadata_api"
         )
         sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
 

@@ -42,10 +42,10 @@ if not DATABASE_URL:
     is_docker = os.getenv("IS_DOCKER") == "true"
     DB_HOST = os.getenv("DB_HOST", "localhost" if not is_docker else "paradedb")
     DB_PORT = os.getenv("DB_PORT", "2345" if not is_docker else "5432")
-    # Always default to the btaa_geospatial_api database for this application
-    DB_NAME = os.getenv("DB_NAME", "btaa_geospatial_api")
+    # Always default to the opengeometadata_api database for this application
+    DB_NAME = os.getenv("DB_NAME", "opengeometadata_api")
 
-    # Construct database URL with asyncpg driver, always targeting btaa_geospatial_api
+    # Construct database URL with asyncpg driver, always targeting opengeometadata_api
     DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 else:
     DATABASE_URL = _repair_placeholder_database_password(DATABASE_URL)
@@ -57,8 +57,8 @@ else:
         parsed = urlparse(DATABASE_URL)
         docker_hostnames = [
             "paradedb",
-            "btaa-geospatial-api-paradedb",
-            "btaa-geospatial-api-paradedb-1",
+            "opengeometadata-api-paradedb",
+            "opengeometadata-api-paradedb-1",
         ]
         if parsed.hostname in docker_hostnames:
             # Replace Docker hostname with localhost and use port 2345 (Docker mapped port)

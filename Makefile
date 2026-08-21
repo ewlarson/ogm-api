@@ -1,4 +1,4 @@
-.PHONY: lint format lint-check test test-fast test-no-coverage migrate reindex gazetteers ogm-nightly cache-prime cache-prime-background kamal-registry-login transfer-readiness transfer-readiness-full
+.PHONY: lint format lint-check identity-check test test-fast test-no-coverage migrate reindex gazetteers ogm-nightly cache-prime cache-prime-background kamal-registry-login transfer-readiness transfer-readiness-full
 
 BACKEND_DIR = backend
 
@@ -15,6 +15,9 @@ lint-check:
 	@echo "Checking formatting without modifying files..."
 	cd $(BACKEND_DIR) && ruff format --check app tests scripts
 	cd $(BACKEND_DIR) && ruff check app tests scripts
+
+identity-check:
+	./scripts/verify_identity_cleanup.sh
 
 test:
 	@echo "Running backend test suite..."
