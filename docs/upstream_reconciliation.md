@@ -99,3 +99,16 @@ pull requests and pushes to `develop`.
 Before the next upstream review, fetch `upstream`, choose a new immutable review
 ceiling, append every backend-affecting commit to this ledger, and keep earlier
 decisions intact for auditability.
+
+## September 12, 2026 review: 0.8.11 through 0.9.1
+
+The next review ceiling is fetched upstream
+`9a4c78419e371f83642b3b1330f9fd804d3e0ff7`. The
+[September migration review](upstream_review_2026-09-12.md) extends this ledger
+with all 33 backend-affecting non-merge commits since `4254aa3`, priority
+recommendations, compatibility considerations, and proposed validation.
+The original review records candidate decisions. The subsequent
+[selected-port implementation](upstream_ports_0.9.1.md) applies `eb89c10`,
+`131fa98`, `f6e6573`, `4389011`, `4ca8e5f`, `9ee88fe`, `80dcd59`, and
+`5b35609` selectively, with OGM adaptations and regression coverage.
+The full-import baseline and earlier port decisions remain unchanged.

@@ -113,6 +113,7 @@ class SearchService:
         callback: Optional[str] = None,
         facets: Optional[str] = None,
         include_filters: Optional[Dict] = None,
+        include_filter_operator: str = "or",
         exclude_filters: Optional[Dict] = None,
         fq_direct: Optional[Dict] = None,
         adv_q: Optional[list] = None,
@@ -176,6 +177,7 @@ class SearchService:
                 sort=sort_mapping,
                 search_fields=search_fields,
                 include_filters=include_filters,
+                include_filter_operator=include_filter_operator,
                 exclude_filters=exclude_filters,
                 facets=facets,
                 adv_q=adv_q,
@@ -483,22 +485,10 @@ class SearchService:
             "extract_new_style_filters: Parsing params: %s...",
             params[:200] if params else "None",
         )
-        # parse_qs expects a URL-decoded query string
-        # If params is URL-encoded (contains %5B for [), decode it first
-        from urllib.parse import unquote
-
-        if params and "%5B" in params:
-            # URL-encoded brackets detected, decode first
-            decoded_params = unquote(params)
-            logger.debug(
-                "extract_new_style_filters: Decoded params sample: %s",
-                decoded_params[:200],
-            )
-            raw_params = parse_qs(decoded_params)
-        elif isinstance(params, str):
-            raw_params = parse_qs(params)
-        else:
-            raw_params = parse_qs(str(params))
+        # parse_qs decodes both parameter names and values. Decoding the full
+        # query string first would turn an encoded value such as ``%26`` into
+        # a structural ``&`` separator before parsing it.
+        raw_params = parse_qs(str(params))
         geo_keys: list[str] = []
         if logger.isEnabledFor(logging.DEBUG):
             geo_keys = [k for k in raw_params.keys() if "geo" in k.lower()]
@@ -650,7 +640,10 @@ class SearchService:
         # Handle year_range filters
         year_range_filters = {}
         for key, values in raw_params.items():
-            if key.startswith("include_filters[year_range][") and key.endswith("]"):
+            if key in {
+                "include_filters[year_range][start]",
+                "include_filters[year_range][end]",
+            }:
                 sub_key = key[len("include_filters[year_range][") : -1]  # start or end
                 year_range_filters[sub_key] = values[0] if values else None
 
@@ -663,6 +656,7 @@ class SearchService:
                 key.startswith("include_filters[")
                 and key.endswith("][]")
                 and not key.startswith("include_filters[geo][")
+                and not key.startswith("include_filters[year_range][")
             ):
                 field = key[len("include_filters[") : -len("][]")]
                 include_filters[field] = values

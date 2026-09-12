@@ -11,6 +11,7 @@ from app.elasticsearch.search import (
     BBOX_SPATIAL_BOOST_WEIGHT,
     MIN_BBOX_IOU_OVERLAP_RATIO,
     _build_bbox_overlap_filter,
+    _build_exact_filter_clauses,
     _compute_bbox_spatial_metrics,
     _escape_query_string_brackets,
     _normalize_geo_bbox_bounds,
@@ -22,6 +23,51 @@ from app.elasticsearch.search import (
 
 
 class TestElasticsearchSearch:
+    def test_repeated_include_values_preserve_api_or_default(self):
+        clauses = _build_exact_filter_clauses(
+            "dct_spatial_sm",
+            ["Indiana", "Indiana--Bloomington"],
+            "or",
+        )
+
+        assert clauses == [
+            {"terms": {"dct_spatial_sm.keyword": ["Indiana", "Indiana--Bloomington"]}}
+        ]
+
+    def test_repeated_include_values_build_drilldown_and_clauses(self):
+        clauses = _build_exact_filter_clauses(
+            "dct_spatial_sm",
+            ["Indiana", "Indiana--Bloomington"],
+            "and",
+        )
+
+        assert clauses == [
+            {"term": {"dct_spatial_sm.keyword": "Indiana"}},
+            {"term": {"dct_spatial_sm.keyword": "Indiana--Bloomington"}},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_map_h3_aggregation_uses_drilldown_include_filters(self):
+        mock_es = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.body = {
+            "aggregations": {
+                "h3_terms": {"buckets": []},
+                "global_bucket_agg": {"doc_count": 0},
+            }
+        }
+        mock_es.search.return_value = mock_response
+
+        with patch("app.elasticsearch.search.es", mock_es):
+            await map_h3_aggregation(
+                include_filters={"dct_spatial_sm": ["Indiana", "Indiana--Bloomington"]},
+                include_filter_operator="and",
+            )
+
+        filters = mock_es.search.await_args.kwargs["query"]["bool"]["filter"]
+        assert {"term": {"dct_spatial_sm.keyword": "Indiana"}} in filters
+        assert {"term": {"dct_spatial_sm.keyword": "Indiana--Bloomington"}} in filters
+
     """Test cases for Elasticsearch search functionality."""
 
     @pytest.fixture(autouse=True)

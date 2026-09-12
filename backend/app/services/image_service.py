@@ -216,20 +216,23 @@ class ImageService:
                     self.logger.debug(f"Found manifest-level thumbnail: {candidate}")
                     return self._standardize_iiif_url(candidate)
 
-            # Sequences - Prefer direct resource @id, then service @id
+            # IIIF v2: the resource ID may be an HTML catalog page (e.g. OSU).
+            # Prefer the declared image service to construct a bounded rendition.
             if manifest_json.get("sequences"):
                 self.logger.debug("Image: sequences")
                 canvas = manifest_json.get("sequences", [{}])[0].get("canvases", [{}])[0]
                 image = canvas.get("images", [{}])[0].get("resource", {})
-
-                # Prefer direct image ID when present
+                service = image.get("service")
+                if isinstance(service, list):
+                    service = service[0] if service else None
+                if isinstance(service, dict):
+                    service_id = service.get("@id") or service.get("id")
+                else:
+                    service_id = service if isinstance(service, str) else None
+                if service_id:
+                    return self._standardize_iiif_url(service_id, image_service=True)
                 if image.get("@id"):
                     return self._standardize_iiif_url(image["@id"])
-
-                # Fallback to image service @id to construct consistent size
-                service_id = image.get("service", {}).get("@id")
-                if service_id:
-                    return self._standardize_iiif_url(service_id)
 
             # Items - IIIF v3 style
             elif manifest_json.get("items"):
@@ -272,7 +275,7 @@ class ImageService:
 
                     if body_service_id:
                         self.logger.debug(f"Found body service ID: {body_service_id}")
-                        return self._standardize_iiif_url(body_service_id)
+                        return self._standardize_iiif_url(body_service_id, image_service=True)
 
                     # Next try body.id (prefer direct ID unmodified)
                     if body.get("id"):
@@ -402,12 +405,16 @@ class ImageService:
             return None
         return self._extract_thumbnail_from_iiif_info_json(info_json, info_url)
 
-    def _standardize_iiif_url(self, url: str) -> str:
+    def _standardize_iiif_url(self, url: str, *, image_service: bool = False) -> str:
         """
         Standardize IIIF image URLs to ensure consistent size.
         Converts various IIIF image URLs to a standard bounded-box rendition.
         """
         try:
+            # A declared service may have no /iiif/ path (for example Loris).
+            if image_service:
+                return f"{url.rstrip('/').removesuffix('/info.json')}{IIIF_THUMBNAIL_PATH}"
+
             # Skip if not a likely IIIF URL
             if not any(x in url.lower() for x in ["/iiif/", "/image/", "info.json"]):
                 return url
@@ -878,24 +885,14 @@ class ImageService:
             if not iiif_url:
                 continue
 
-            # Transform ContentDM IIIF URLs
+            # Normalize legacy CONTENTdm paths without changing the provider.
             if url_hostname_matches(iiif_url, "contentdm.oclc.org"):
-                # Handle both /digital/iiif/ and /iiif/ patterns
-                # Pattern 1: /digital/iiif/collection/id
-                match = re.search(r"/digital/iiif/([^/]+)/(\d+)", iiif_url)
-                if match:
-                    collection, item_id = match.groups()
-                    return self._standardize_iiif_url(
-                        f"https://cdm16022.contentdm.oclc.org/iiif/2/{collection}:{item_id}"
-                    )
-
-                # Pattern 2: /iiif/collection:id/manifest.json or /iiif/collection:id/
-                match = re.search(r"/iiif/([^/]+)/", iiif_url)
-                if match:
-                    collection_item = match.group(1)
-                    return self._standardize_iiif_url(
-                        f"https://cdm16022.contentdm.oclc.org/iiif/2/{collection_item}"
-                    )
+                iiif_url = re.sub(
+                    r"/digital/iiif/([^/]+)/(\d+)(?=/|$)",
+                    r"/iiif/2/\1:\2",
+                    iiif_url,
+                    count=1,
+                )
 
             # Preserve Image API info documents for the worker. Level 0 services
             # must be read before choosing one of their advertised static sizes.
@@ -920,28 +917,8 @@ class ImageService:
                     break
 
         if manifest_url:
-            # Special case: ContentDM manifest URLs can be directly converted to image URLs
-            # without fetching the manifest, since we know the pattern
-            if (
-                url_hostname_matches(manifest_url, "contentdm.oclc.org")
-                and "/iiif/" in manifest_url
-            ):
-                # Extract collection:item from ContentDM manifest URL
-                # Pattern: https://cdm16022.contentdm.oclc.org/iiif/p16022coll55:1755/manifest.json
-                match = re.search(r"/iiif/([^/]+)/", manifest_url)
-                if match:
-                    collection_item = match.group(1)
-                    # Convert to direct IIIF image URL
-                    image_url = self._standardize_iiif_url(
-                        f"https://cdm16022.contentdm.oclc.org/iiif/2/{collection_item}"
-                    )
-                    self.logger.info(
-                        f"✅ Directly converted ContentDM manifest to image URL: {image_url}"
-                    )
-                    return image_url
-
-            # For other manifests, return the source without side effects. The
-            # thumbnail endpoint owns queueing so each request creates at most one job.
+            # Compound object IDs need not identify an image. Return the manifest
+            # without queueing; the thumbnail endpoint owns the worker job.
             return manifest_url
 
         # Use curated b1g_image_ss only after exhausting IIIF-based options.
