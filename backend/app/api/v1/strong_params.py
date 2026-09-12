@@ -15,6 +15,7 @@ SEARCH_ALLOWED_PARAMS = [
     "fields",  # Field filtering for response attributes
     "facets",  # Facet filtering for response aggregations
     "meta",  # Include per-resource meta
+    "include_filter_operator",  # Repeated exact filter values: and/or
     "callback",  # JSONP callback
     # Explicit facet filter parameters (fq[<field>][]) expected by tests
     "fq[dct_resourceClass_sm][]",
@@ -50,6 +51,7 @@ FACET_ALLOWED_PARAMS = [
     "sort",  # Sort option (count_desc, count_asc, alpha_asc, alpha_desc)
     "q_facet",  # Search query to filter facet values
     "adv_q",  # Advanced multi-field search queries
+    "include_filter_operator",  # Repeated exact filter values: and/or
     "callback",  # JSONP callback
     # Explicit facet filter parameters (fq[<field>][]) expected by tests
     "fq[dct_resourceClass_sm][]",

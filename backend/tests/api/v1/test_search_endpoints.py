@@ -5,8 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-from app.api.v1.endpoint_modules.search import _handle_search
+from app.api.v1.endpoint_modules.search import _build_semantic_search_cache_key, _handle_search
 from app.main import app
 from app.services.resource_representation_cache import RESOURCE_SEARCH_RESULT_REPRESENTATION_PROFILE
 from tests.utils.route_helpers import route_paths
@@ -1000,3 +1001,72 @@ class TestSearchEndpointsEnhanced:
             response = client.get(f"/api/v1/search?q={query}")
             # Should handle case variations gracefully
             assert response.status_code in [200, 500]  # Allow database errors in test env
+
+
+@pytest.mark.asyncio
+async def test_handle_search_forwards_drilldown_filter_operator():
+    request = _build_request(b"include_filter_operator=and")
+    search_mock = AsyncMock(
+        return_value={
+            "data": [],
+            "meta": {"pages": {"total_count": 0, "total_pages": 0}},
+            "queryTime": {},
+        }
+    )
+
+    with patch("app.api.v1.endpoint_modules.search.SearchService.search", search_mock):
+        response = await _handle_search(
+            request,
+            {
+                "page": 1,
+                "per_page": 20,
+                "meta": True,
+                "include_filter_operator": "and",
+            },
+        )
+
+    assert response.status_code == 200
+    assert search_mock.await_args.kwargs["include_filter_operator"] == "and"
+
+
+def test_semantic_search_cache_key_includes_filter_operator():
+    common = {
+        "q": "",
+        "page": 1,
+        "per_page": 20,
+        "sort": None,
+        "search_field": None,
+        "fields": None,
+        "facets": None,
+        "include_filters": {"dct_spatial_sm": ["Indiana", "Indiana--Bloomington"]},
+        "exclude_filters": {},
+        "fq": {},
+        "adv_q": None,
+    }
+
+    or_key = _build_semantic_search_cache_key(**common, include_filter_operator="or")
+    and_key = _build_semantic_search_cache_key(**common, include_filter_operator="and")
+
+    assert or_key != and_key
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+@pytest.mark.parametrize("operator", ["and", "or"])
+def test_search_routes_forward_filter_operator(method, operator):
+    handler = AsyncMock(return_value=JSONResponse({"data": []}))
+    with patch("app.api.v1.endpoint_modules.search._handle_search", handler):
+        if method == "get":
+            response = client.get("/api/v1/search", params={"include_filter_operator": operator})
+        else:
+            response = client.post("/api/v1/search", json={"include_filter_operator": operator})
+    assert response.status_code == 200
+    assert handler.await_args.args[1]["include_filter_operator"] == operator
+
+
+@pytest.mark.parametrize("method,expected_status", [("get", 422), ("post", 400)])
+def test_search_routes_reject_invalid_filter_operator(method, expected_status):
+    if method == "get":
+        response = client.get("/api/v1/search", params={"include_filter_operator": "xor"})
+    else:
+        response = client.post("/api/v1/search", json={"include_filter_operator": "xor"})
+    assert response.status_code == expected_status

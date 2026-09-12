@@ -3,10 +3,29 @@ Tests for the SearchService.
 """
 
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 import pytest
 
 from app.services.search_service import SearchService
+
+
+def test_extract_new_style_filters_decodes_query_parameters_once():
+    """Encoded reserved characters must remain part of facet values."""
+    service = SearchService()
+    local_collection = "University of Maryland: U.S. Government Information, Maps, & GIS Services"
+    excluded_publisher = "C++ Maps & Data"
+    query_string = urlencode(
+        [
+            ("include_filters[b1g_localCollectionLabel_sm][]", local_collection),
+            ("exclude_filters[dct_publisher_sm][]", excluded_publisher),
+        ]
+    )
+
+    include, exclude = service.extract_new_style_filters(query_string)
+
+    assert include == {"b1g_localCollectionLabel_sm": [local_collection]}
+    assert exclude == {"dct_publisher_sm": [excluded_publisher]}
 
 
 @pytest.mark.asyncio
@@ -43,6 +62,22 @@ async def test_search_forwards_hydrate_hits_flag():
         await service.search(q="test", page=1, limit=10, hydrate_hits=False)
 
     assert mock_search.call_args.kwargs["hydrate_hits"] is False
+
+
+@pytest.mark.asyncio
+async def test_search_forwards_include_filter_operator():
+    service = SearchService()
+
+    with patch("app.services.search_service.search_resources") as mock_search:
+        mock_search.return_value = {"data": [], "meta": {}, "queryTime": {}}
+
+        await service.search(
+            q="",
+            include_filters={"dct_spatial_sm": ["Indiana", "Indiana--Bloomington"]},
+            include_filter_operator="and",
+        )
+
+    assert mock_search.call_args.kwargs["include_filter_operator"] == "and"
 
 
 @pytest.mark.asyncio
@@ -991,6 +1026,25 @@ class TestSearchService:
         assert dist["field"] == "dcat_centroid"
         assert dist["distance"] == "25km"
         assert dist["center"] == {"lat": 43.5, "lon": -106.2}
+        assert exclude == {}
+
+    def test_extract_new_style_filters_ignores_array_style_year_range(self):
+        """Malformed year arrays must not replace structured range bounds."""
+        service = SearchService()
+        params = (
+            "include_filters[year_range][start]=1920&"
+            "include_filters[year_range][end]=1929&"
+            "include_filters[year_range][]=1920&"
+            "include_filters[year_range][]=1929&"
+            "include_filters[dcat_theme_sm][]=Boundaries"
+        )
+
+        include, exclude = service.extract_new_style_filters(params)
+
+        assert include == {
+            "year_range": {"start": "1920", "end": "1929"},
+            "dcat_theme_sm": ["Boundaries"],
+        }
         assert exclude == {}
 
     @pytest.mark.asyncio
